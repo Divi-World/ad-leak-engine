@@ -39,3 +39,22 @@ class L2LiveProbe:
         except Exception as e:
             network_log["error"] = str(e)
         return network_log
+
+
+
+def detect_capi_dedup_failure(telemetry) -> bool:
+    # Check if browser and server events lack shared event_id
+    return not telemetry.get("has_shared_event_id", True)
+
+def detect_missing_initiate_checkout(telemetry) -> bool:
+    return not telemetry.get("has_initiate_checkout", False)
+
+def detect_missing_add_to_cart(telemetry) -> bool:
+    return not telemetry.get("has_add_to_cart", False)
+
+def detect_attribution_gap(page, telemetry) -> bool:
+    # Ad Library shows spend but no conversion signals
+    has_spend = page.total_estimated_spend[1] > 0 if page.total_estimated_spend else False
+    has_conversions = telemetry.get("has_purchase_event", False)
+    return has_spend and not has_conversions
+

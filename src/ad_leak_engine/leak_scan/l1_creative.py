@@ -70,3 +70,19 @@ class L1CreativeScanner(AbstractLeakScanner):
             ))
             
         return leaks
+
+
+
+def detect_generic_hook(ad) -> bool:
+    body = (ad.body or "").lower()
+    # Heuristic: lacks specific geo or pain point
+    cities = ["new york", "london", "tokyo", "los angeles", "miami"]
+    pain_points = ["struggle", "tired of", "frustrated", "hate"]
+    has_city = any(city in body for city in cities)
+    has_pain = any(pain in body for pain in pain_points)
+    return not has_city and not has_pain and len(body) > 20
+
+def detect_no_retargeting(page) -> bool:
+    # Heuristic: All ads target broad, no custom audience indicators in raw data
+    return True # Placeholder for broad targeting heuristic
+
