@@ -1,0 +1,46 @@
+"""
+Meta CAPI Server-Side Webhook - Ad-Leak-Engine [SEED: 2399]
+Endpoint: POST /orders/create
+Replace: YOUR_PIXEL_ID_HERE, YOUR_ACCESS_TOKEN_HERE
+"""
+import hashlib
+import time
+
+import requests
+from fastapi import FastAPI, Request
+
+app = FastAPI()
+
+PIXEL_ID = "YOUR_PIXEL_ID_HERE"
+ACCESS_TOKEN = "YOUR_ACCESS_TOKEN_HERE"
+
+
+def sha256_hash(value: str) -> str:
+    return hashlib.sha256(value.strip().lower().encode()).hexdigest()
+
+
+@app.post("/orders/create")
+async def order_created(request: Request):
+    order = await request.json()
+    event_id = f"order_{order.get('id')}"
+
+    payload = {
+        "data": [{
+            "event_name": "Purchase",
+            "event_time": int(time.time()),
+            "event_id": event_id,
+            "action_source": "website",
+            "user_data": {
+                "em": [sha256_hash(order.get("email", ""))],
+                "ph": [sha256_hash(order.get("phone", ""))],
+            },
+            "custom_data": {
+                "currency": order.get("currency", "USD"),
+                "value": order.get("total", 0),
+            },
+        }]
+    }
+
+    url = f"https://graph.facebook.com/v18.0/{PIXEL_ID}/events"
+    resp = requests.post(url, json=payload, params={"access_token": ACCESS_TOKEN})
+    return {"status": resp.status_code}

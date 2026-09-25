@@ -1,0 +1,16 @@
+# {{ platform }} Fix Guide — Ad-Leak-Engine [SEED: 2399]
+
+## Detected Leak
+- **Signal:** `{{ leak_signal }}`
+- **Recommendation:** {{ recommendation }}
+
+## What This Fix Does
+This fix restores Meta tracking for your BigCommerce storefront using
+the native Script Manager, requiring no theme edits.
+
+## Implementation
+Use the Script Manager snippet provided. Alternatively, connect the
+native Meta Pixel via Settings > Data Solutions.
+
+## After Applying
+Verify the pixel fires on all pages using the Meta Pixel Helper extension.

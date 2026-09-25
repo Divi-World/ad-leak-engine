@@ -1,0 +1,17 @@
+# {{ platform }} Fix Guide — Ad-Leak-Engine [SEED: 2399]
+
+## Detected Leak
+- **Signal:** `{{ leak_signal }}`
+- **Recommendation:** {{ recommendation }}
+
+## What This Fix Does
+This fix restores Meta tracking on a custom-built site using either
+Google Tag Manager (browser) or a server-side webhook (CAPI).
+
+## Implementation
+For browser tracking, use the GTM tag. For server-side reliability,
+deploy the CAPI webhook to your backend.
+
+## After Applying
+Verify events appear in Meta Events Manager for both browser and
+server sources with matching event_ids.

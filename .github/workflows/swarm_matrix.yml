@@ -1,0 +1,36 @@
+name: Swarm Matrix Scan [SEED: 2399]
+on:
+  workflow_dispatch:
+    inputs:
+      keyword:
+        description: 'Keyword to search'
+        required: true
+        default: 'shoes'
+      country:
+        description: 'Country code'
+        required: true
+        default: 'US'
+jobs:
+  swarm:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[scrape]"
+          python -m camoufox fetch
+      - name: Ephemeral scrape (shard ${{ matrix.shard }})
+        run: python scripts/swarm_scrape.py --keyword "${{ inputs.keyword }}" --country "${{ inputs.country }}" --max-results 50
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: swarm-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: output/swarm/

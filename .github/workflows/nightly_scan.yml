@@ -1,0 +1,38 @@
+name: Nightly Scan [SEED: 2399]
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        keyword: ['shoes', 'skincare', 'fitness']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[scrape]"
+          playwright install chromium
+
+      - name: Scrape keyword
+        run: |
+          python scripts/swarm_scrape.py --keyword "${{ matrix.keyword }}" --country "US" --max-results 50
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-${{ github.run_id }}-${{ strategy.job-index }}
+          path: output/swarm/

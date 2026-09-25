@@ -1,0 +1,18 @@
+# {{ platform }} Fix Guide — Ad-Leak-Engine [SEED: 2399]
+
+## Detected Leak
+- **Signal:** `{{ leak_signal }}`
+- **Recommendation:** {{ recommendation }}
+
+## What This Fix Does
+This fix restores your Meta tracking infrastructure so Meta's algorithm
+receives accurate conversion data. Without it, your ad spend optimizes
+against incomplete signals, inflating CPA and suppressing ROAS.
+
+## Implementation
+Follow the code block provided alongside this guide. The exact location
+to paste the code is specified in the code block metadata.
+
+## After Applying
+Allow 24-48 hours for Meta to re-optimize with the restored data stream.
+Monitor Meta Events Manager for incoming events.

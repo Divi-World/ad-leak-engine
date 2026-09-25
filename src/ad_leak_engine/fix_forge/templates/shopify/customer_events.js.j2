@@ -1,0 +1,53 @@
+{%- raw -%}
+// Meta Pixel Customer Events - Ad-Leak-Engine [SEED: 2399]
+// Location: Shopify Admin > Settings > Customer Events > Add custom pixel
+analytics.subscribe("page_viewed", (event) => {
+  fbq('track', 'PageView', {event_id: event.id});
+});
+
+analytics.subscribe("product_viewed", (event) => {
+  fbq('track', 'ViewContent', {
+    content_ids: [event.data.productVariant.id],
+    content_type: 'product',
+    value: event.data.productVariant.price.amount,
+    currency: event.data.productVariant.price.currencyCode,
+    event_id: event.id
+  });
+});
+
+analytics.subscribe("product_added_to_cart", (event) => {
+  fbq('track', 'AddToCart', {
+    content_ids: [event.data.productVariant.id],
+    content_type: 'product',
+    value: event.data.productVariant.price.amount,
+    currency: event.data.productVariant.price.currencyCode,
+    event_id: event.id
+  });
+});
+
+analytics.subscribe("checkout_started", (event) => {
+  fbq('track', 'InitiateCheckout', {
+    value: event.data.checkout.totalPrice.amount,
+    currency: event.data.checkout.totalPrice.currencyCode,
+    event_id: event.id
+  });
+});
+
+analytics.subscribe("payment_info_submitted", (event) => {
+  fbq('track', 'AddPaymentInfo', {
+    value: event.data.checkout.totalPrice.amount,
+    currency: event.data.checkout.totalPrice.currencyCode,
+    event_id: event.id
+  });
+});
+
+analytics.subscribe("checkout_completed", (event) => {
+  fbq('track', 'Purchase', {
+    value: event.data.checkout.totalPrice.amount,
+    currency: event.data.checkout.totalPrice.currencyCode,
+    content_ids: event.data.checkout.lineItems.map(item => item.id),
+    num_items: event.data.checkout.lineItems.length,
+    event_id: event.id
+  });
+});
+{%- endraw -%}

@@ -1,0 +1,51 @@
+<?php
+/**
+ * Meta CAPI Purchase Event - Ad-Leak-Engine [SEED: 2399]
+ * Location: functions.php (use a child theme to survive updates)
+ * Hook: woocommerce_thankyou
+ * Replace: YOUR_PIXEL_ID_HERE, YOUR_ACCESS_TOKEN_HERE
+ */
+add_action('woocommerce_thankyou', function($order_id) {
+    $order = wc_get_order($order_id);
+    if (!$order) {
+        return;
+    }
+
+    $pixel_id     = 'YOUR_PIXEL_ID_HERE';
+    $access_token = 'YOUR_ACCESS_TOKEN_HERE';
+    $event_id     = 'order_' . $order_id; // Shared dedup key with browser pixel
+
+    // SHA-256 hash PII for Event Match Quality (never send raw PII)
+    $hashed_email = hash('sha256', strtolower(trim($order->get_billing_email())));
+    $hashed_phone = hash('sha256', preg_replace('/[^0-9]/', '', $order->get_billing_phone()));
+
+    $payload = array(
+        'data' => array(
+            array(
+                'event_name'       => 'Purchase',
+                'event_time'       => time(),
+                'event_id'         => $event_id,
+                'action_source'    => 'website',
+                'event_source_url' => home_url('/checkout/order-received/' . $order_id),
+                'user_data'        => array(
+                    'em' => array($hashed_email),
+                    'ph' => array($hashed_phone),
+                ),
+                'custom_data'      => array(
+                    'currency' => $order->get_currency(),
+                    'value'    => (float) $order->get_total(),
+                ),
+            ),
+        ),
+    );
+
+    wp_remote_post(
+        'https://graph.facebook.com/v18.0/' . $pixel_id . '/events?access_token=' . $access_token,
+        array(
+            'method'  => 'POST',
+            'headers' => array('Content-Type' => 'application/json'),
+            'body'    => wp_json_encode($payload),
+            'timeout' => 5,
+        )
+    );
+});
