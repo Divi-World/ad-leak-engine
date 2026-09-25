@@ -1,16 +1,16 @@
-name: Swarm Matrix Scan [SEED: 2399]
+name: Swarm Matrix Scan
 
 on:
   workflow_dispatch:
     inputs:
       keyword:
-        description: 'Keyword to search'
+        description: Keyword
         required: true
-        default: 'shoes'
+        default: shoes
       country:
-        description: 'Country code'
+        description: Country
         required: true
-        default: 'US'
+        default: US
 
 jobs:
   swarm:
@@ -21,32 +21,22 @@ jobs:
         shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
-      - name: Install system dependencies
+          python-version: 3.11
+      - name: Install system deps
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 libpangocairo-1.0-0 libgtk-3-0
-
-      - name: Install Python dependencies
+      - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[scrape]"
-
-      - name: Fetch camoufox browser
+      - name: Fetch camoufox
         run: python -m camoufox fetch
-
-      - name: Ephemeral scrape (shard ${{ matrix.shard }})
-        run: |
-          python scripts/swarm_scrape.py \
-            --keyword "${{ inputs.keyword }}" \
-            --country "${{ inputs.country }}" \
-            --max-results 50
-
-      - name: Upload results
+      - name: Scrape
+        run: python scripts/swarm_scrape.py --keyword "${{ inputs.keyword }}" --country "${{ inputs.country }}" --max-results 50
+      - name: Upload
         if: always()
         uses: actions/upload-artifact@v4
         with:
