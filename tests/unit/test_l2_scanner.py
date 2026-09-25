@@ -42,5 +42,6 @@ def test_healthy_tracking():
         "is_checkout_page": True,
         "capi_events": [{"event_name": "Purchase"}, {"event_name": "InitiateCheckout"}]
     })
+    page.raw["network_log"].update({"has_initiate_checkout": True, "has_add_to_cart": True, "has_shared_event_id": True})
     leaks = scanner.scan(page)
     assert len(leaks) == 0

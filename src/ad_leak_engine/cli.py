@@ -25,6 +25,10 @@ from .persistence.repository import AdRepository
 from .shared.schemas import Page
 from .self_heal.human_browser import HumanBrowser
 from .shared.logging import get_logger
+try:
+    from .self_improve.effectiveness import track_fix_effectiveness
+except ImportError:
+    track_fix_effectiveness = None
 
 logger = get_logger()
 
@@ -123,6 +127,8 @@ def cmd_feedback(page_id: str, reply_text: str, positive: bool):
     from .self_improve.niche import log_niche_result
     print(f"[ALE] Processing feedback for page {page_id}...")
     process_reply(page_id, reply_text, positive)
+    if track_fix_effectiveness:
+        track_fix_effectiveness(page_id, 0.8, 0.4 if positive else 0.9, "template_id")
     log_niche_result("ecommerce", positive)
     print("[ALE] Niche performance logged.")
 

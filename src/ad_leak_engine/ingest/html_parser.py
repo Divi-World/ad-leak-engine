@@ -1,60 +1,47 @@
-"""HTML Parser: Extracts RawAd contracts from Meta's embedded HTML [SEED: 2399].
+"""HTML Parser: Extracts ad data from raw HTML using BeautifulSoup [SEED: 2399].
 
-When Meta embeds the GraphQL data directly into the HTML for React hydration,
-the network interceptor may miss it. This parser uses regex to reliably
-extract ad_archive_id, page_id, page_name, and body from the raw HTML.
+Complementary to html_extractor.py. Uses DOM parsing for structured extraction.
 """
-import re
-from ..shared.schemas import RawAd
-from .normalizer import normalize_meta_ad
+from typing import Any
 
-def parse_html_to_ads(html: str, country: str) -> list[RawAd]:
-    """Extracts ads from the raw HTML using regex markers."""
+
+def parse_html_to_ads(html: str, country: str = "US") -> list[dict]:
+    """Parse raw HTML and extract ad-like structures.
+    
+    Returns list of dicts with ad_archive_id, page info, and snapshot data.
+    Used as fallback when html_extractor.py regex approach yields no results.
+    """
+    if not html:
+        return []
+
     ads = []
-    seen = set()
-    
-    # Find all ad_archive_ids in the HTML
-    matches = re.finditer(r'"ad_archive_id":"(\d+)"', html)
-    
-    for match in matches:
-        ad_id = match.group(1)
-        if ad_id in seen:
-            continue
-        seen.add(ad_id)
-        
-        # Extract surrounding context (approx 3000 chars around the match)
-        start = max(0, match.start() - 1500)
-        end = min(len(html), match.end() + 1500)
-        context = html[start:end]
-        
-        # Extract page_id
-        page_id_match = re.search(r'"page":\s*\{\s*"id":"(\d+)"', context)
-        page_id = page_id_match.group(1) if page_id_match else "unknown"
-        
-        # Extract page_name
-        page_name_match = re.search(r'"page":\s*\{\s*"id":"\d+",\s*"name":"([^"]+)"', context)
-        page_name = page_name_match.group(1) if page_name_match else "Unknown Page"
-        
-        # Extract snapshot/body
-        body_match = re.search(r'"body":\s*"([^"]{0,1000})"', context)
-        body = body_match.group(1) if body_match else None
-        
-        # Extract creation_time (unix timestamp)
-        time_match = re.search(r'"ad_delivery_start_time":\s*"?(\d+)"?', context)
-        creation_time = int(time_match.group(1)) if time_match else None
-        
-        raw_node = {
-            "id": ad_id,
-            "ad_archive_id": ad_id,
-            "page": {"id": page_id, "name": page_name},
-            "snapshot": {"body": body},
-            "creation_time": creation_time
-        }
-        
-        try:
-            ad = normalize_meta_ad(raw_node, country)
-            ads.append(ad)
-        except Exception:
-            continue
-            
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, "lxml")
+
+        # Look for ad archive ID markers in data attributes or scripts
+        for script in soup.find_all("script"):
+            if script.string and "ad_archive_id" in script.string:
+                # Delegate to html_extractor for the actual parsing
+                from .html_extractor import HtmlAdExtractor
+                extractor = HtmlAdExtractor()
+                return [ad.__dict__ for ad in extractor.extract_ads(html, country)]
+
+        # Look for structured ad cards in DOM
+        ad_cards = soup.find_all(attrs={"data-ad-archive-id": True})
+        for card in ad_cards:
+            ad_data = {
+                "id": card.get("data-ad-archive-id", ""),
+                "page_id": card.get("data-page-id", "unknown"),
+                "page_name": card.get("data-page-name", "Unknown Page"),
+                "body": card.get_text(strip=True)[:500] if card.get_text(strip=True) else None,
+                "landing_url": card.get("data-link-url"),
+                "country": country,
+            }
+            if ad_data["id"]:
+                ads.append(ad_data)
+
+    except Exception:
+        pass
+
     return ads

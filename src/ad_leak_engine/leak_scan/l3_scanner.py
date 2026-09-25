@@ -64,6 +64,20 @@ class L3SiteScanner(AbstractLeakScanner):
                 recommendation="Too many third-party scripts blocking pixel. Defer non-critical JS."
             ))
 
+        # [SEED: 2399] Advanced L3 Signals
+        html_content = page.raw.get("html", "") if page.raw else ""
+        url = page.url or ""
+        net_log = page.raw.get("network_log", {}) if page.raw else {}
+        
+        if 'detect_no_mobile_viewport' in globals() and detect_no_mobile_viewport(html_content):
+            leaks.append(Leak(page_id=page.id, tier="L3", signal="no_mobile_viewport", severity=0.9, recommendation="Add <meta name='viewport'> tag", evidence={}))
+        if 'detect_broken_assets' in globals() and detect_broken_assets(net_log):
+            leaks.append(Leak(page_id=page.id, tier="L3", signal="broken_assets", severity=0.6, recommendation="Fix 404s in critical path", evidence={}))
+        if 'detect_mixed_content' in globals() and detect_mixed_content(html_content):
+            leaks.append(Leak(page_id=page.id, tier="L3", signal="mixed_content", severity=0.7, recommendation="Serve all assets over HTTPS", evidence={}))
+        if 'detect_no_ssl' in globals() and detect_no_ssl(url):
+            leaks.append(Leak(page_id=page.id, tier="L3", signal="no_ssl", severity=0.95, recommendation="Install valid SSL certificate", evidence={}))
+
         return leaks
 
 

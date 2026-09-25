@@ -1,0 +1,13 @@
+{
+  "data": [
+    {
+      "id": "ad_1",
+      "page": {
+        "id": "page_1",
+        "name": "Test"
+      },
+      "ad_delivery_start_time": "2026-01-01",
+      "snapshot_url": "http://test"
+    }
+  ]
+}

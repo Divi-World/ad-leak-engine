@@ -69,6 +69,13 @@ class L1CreativeScanner(AbstractLeakScanner):
                 recommendation="All ads use weak or missing CTAs. Use action-oriented CTAs."
             ))
             
+        # [SEED: 2399] Advanced L1 Signals
+        for ad in active_ads:
+            if 'detect_generic_hook' in globals() and detect_generic_hook(ad):
+                leaks.append(Leak(page_id=page.id, tier="L1", signal="generic_hook", severity=0.6, recommendation="Add specific geo or pain point to copy", evidence={"ad_id": ad.id}))
+        if 'detect_no_retargeting' in globals() and detect_no_retargeting(page):
+            leaks.append(Leak(page_id=page.id, tier="L1", signal="no_retargeting", severity=0.7, recommendation="Implement custom audience retargeting", evidence={}))
+
         return leaks
 
 

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "page_fixture_1",
+    "name": "Test Brand",
+    "url": "https://test.com",
+    "ads": [
+      {
+        "id": "ad_1",
+        "page_id": "page_fixture_1",
+        "page_name": "Test Brand",
+        "start_date": "2026-01-01T00:00:00Z",
+        "media_type": "IMAGE",
+        "status": "ACTIVE"
+      }
+    ],
+    "first_seen": "2026-01-01T00:00:00Z"
+  }
+]

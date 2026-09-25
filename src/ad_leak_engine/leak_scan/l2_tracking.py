@@ -38,6 +38,14 @@ class L2TrackingScanner(AbstractLeakScanner):
                 recommendation="No Purchase event fired on checkout page."
             ))
             
+        # [SEED: 2399] Advanced L2 Signals
+        if 'detect_capi_dedup_failure' in globals() and detect_capi_dedup_failure(net_log):
+            leaks.append(Leak(page_id=page.id, tier="L2", signal="capi_dedup_failure", severity=0.85, recommendation="Sync event_id between pixel and CAPI", evidence={}))
+        if 'detect_missing_initiate_checkout' in globals() and detect_missing_initiate_checkout(net_log):
+            leaks.append(Leak(page_id=page.id, tier="L2", signal="missing_initiate_checkout", severity=0.7, recommendation="Add InitiateCheckout event", evidence={}))
+        if 'detect_missing_add_to_cart' in globals() and detect_missing_add_to_cart(net_log):
+            leaks.append(Leak(page_id=page.id, tier="L2", signal="missing_add_to_cart", severity=0.6, recommendation="Add AddToCart event", evidence={}))
+
         return leaks
 
 

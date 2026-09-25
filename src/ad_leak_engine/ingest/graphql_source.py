@@ -12,6 +12,10 @@ from ..shared.schemas import RawAd
 from ..shared.interfaces import AbstractAdSource
 from ..shared.exceptions import BlockedError, RateLimitError, EmptyResponseError
 from .normalizer import normalize_meta_ad
+try:
+    from ..shared.advanced_headers import get_random_headers
+except ImportError:
+    get_random_headers = None
 
 AD_LIBRARY_SEARCH_URL = "https://www.facebook.com/ads/library/async/search_ads/"
 
@@ -30,7 +34,8 @@ class GraphQLSource(AbstractAdSource):
             "count": str(max_results),
         }
         try:
-            resp = session.get(AD_LIBRARY_SEARCH_URL, params=params, timeout=20)
+            headers = get_random_headers() if get_random_headers else {}
+            resp = session.get(AD_LIBRARY_SEARCH_URL, params=params, headers=headers, timeout=20)
         except Exception as e:
             raise EmptyResponseError(f"GraphQL request failed: {e}")
 

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "leak_fixture_1",
+    "page_id": "page_fixture_1",
+    "tier": "L1",
+    "signal": "creative_fatigue",
+    "severity": 0.8,
+    "confidence": 0.9,
+    "evidence": {
+      "days_running": 45
+    },
+    "recommendation": "Refresh creative."
+  }
+]

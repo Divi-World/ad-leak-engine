@@ -81,6 +81,7 @@ class HtmlAdExtractor:
             except Exception:
                 continue
                 
+        
         return ads
 
     def _extract(self, text: str, patterns: list[str], default=None):

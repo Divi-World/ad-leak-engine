@@ -51,5 +51,6 @@ def test_healthy_l3_performance():
         "checkout_steps": 2,
         "scripts_before_pixel": 2
     })
+    page.raw.update({"html": "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head></html>"})
     leaks = scanner.scan(page)
     assert len(leaks) == 0

@@ -18,6 +18,10 @@ from ..shared.exceptions import (
 from ..self_heal.circuit_breaker import CircuitBreaker
 from .graphql_source import GraphQLSource
 from .playwright_source import PlaywrightSource
+try:
+    from ..self_heal.health_monitor import HealthMonitor
+except ImportError:
+    HealthMonitor = None
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +32,7 @@ class HybridRouter:
         self.graphql = graphql or GraphQLSource()
         self.playwright = playwright or PlaywrightSource()
         self.breaker = breaker or CircuitBreaker(failure_threshold=3, recovery_timeout=60)
+        self.monitor = HealthMonitor() if HealthMonitor else None
 
     def search(self, query: str, country: str, max_results: int = 50) -> Iterator[RawAd]:
         # Tier 0: Official API if configured
@@ -50,6 +55,7 @@ class HybridRouter:
             except (SchemaDriftError, BlockedError, RateLimitError, EmptyResponseError) as e:
                 logger.warning("GraphQL failed (%s), engaging fallback.", type(e).__name__)
                 self.breaker.record_failure()
+                if self.monitor: self.monitor.log_fallback()
 
         # Tier 2: Playwright (protected — never crashes the pipeline)
         logger.info("Routing to Playwright fallback.")
