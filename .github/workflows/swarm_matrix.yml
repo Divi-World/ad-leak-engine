@@ -1,14 +1,14 @@
-name: Swarm Matrix Scan [SEED: 2399]
+name: Swarm Matrix Scan
 
 on:
   workflow_dispatch:
     inputs:
       keyword:
-        description: 'Keyword to search'
+        description: 'Keyword'
         required: true
         default: 'shoes'
       country:
-        description: 'Country code'
+        description: 'Country'
         required: true
         default: 'US'
 
@@ -29,9 +29,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[scrape]"
           python -m camoufox fetch
-      - name: Ephemeral scrape (shard ${{ matrix.shard }})
+      - name: Scrape
         run: python scripts/swarm_scrape.py --keyword "${{ inputs.keyword }}" --country "${{ inputs.country }}" --max-results 50
-      - name: Upload results
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: swarm-shard-${{ matrix.shard }}-${{ github.run_id }}
