@@ -15,7 +15,11 @@ from ..shared.exceptions import (
     SchemaDriftError, BlockedError, RateLimitError,
     EmptyResponseError, AdLeakEngineError
 )
+import time
 from ..self_heal.circuit_breaker import CircuitBreaker
+from ..self_heal.retry_policy import get_backoff
+from ..self_heal.fallback_chain import FallbackChain
+from ..persistence.cache import CacheManager
 from .graphql_source import GraphQLSource
 from .playwright_source import PlaywrightSource
 try:
@@ -33,6 +37,8 @@ class HybridRouter:
         self.playwright = playwright or PlaywrightSource()
         self.breaker = breaker or CircuitBreaker(failure_threshold=3, recovery_timeout=60)
         self.monitor = HealthMonitor() if HealthMonitor else None
+        self.cache = CacheManager()
+        self.fallback_chain = FallbackChain(graphql_source=self.graphql, playwright_source=self.playwright, cache=self.cache)
 
     def search(self, query: str, country: str, max_results: int = 50) -> Iterator[RawAd]:
         # Tier 0: Official API if configured
@@ -56,6 +62,9 @@ class HybridRouter:
                 logger.warning("GraphQL failed (%s), engaging fallback.", type(e).__name__)
                 self.breaker.record_failure()
                 if self.monitor: self.monitor.log_fallback()
+                backoff = get_backoff(type(e).__name__, 1)
+                logger.info(f"Applying retry backoff: {backoff:.1f}s")
+                time.sleep(min(backoff, 2.0))
 
         # Tier 2: Playwright (protected — never crashes the pipeline)
         logger.info("Routing to Playwright fallback.")

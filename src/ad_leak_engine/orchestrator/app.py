@@ -6,12 +6,17 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 
 from ..shared.constants import ENGINE_NAME, ENGINE_VERSION, SEED_NUMBER
+from .routes import scan, leads, feedback
 
 app = FastAPI(
     title=ENGINE_NAME,
     version=ENGINE_VERSION,
     description=f"Top 1 Global Ad Infrastructure Audit Engine [SEED: {SEED_NUMBER}]",
 )
+
+app.include_router(scan.router)
+app.include_router(leads.router)
+app.include_router(feedback.router)
 
 
 @app.get("/health")

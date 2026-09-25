@@ -46,6 +46,10 @@ class L2TrackingScanner(AbstractLeakScanner):
         if 'detect_missing_add_to_cart' in globals() and detect_missing_add_to_cart(net_log):
             leaks.append(Leak(page_id=page.id, tier="L2", signal="missing_add_to_cart", severity=0.6, recommendation="Add AddToCart event", evidence={}))
 
+        # [SEED: 2399] Attribution Gap Signal
+        if detect_attribution_gap(page, net_log):
+            leaks.append(Leak(page_id=page.id, tier="L2", signal="attribution_gap", severity=0.9, recommendation="Ad Library shows spend but no conversion signals. Flying blind on ROAS.", evidence={}))
+
         return leaks
 
 
