@@ -1,0 +1,23 @@
+/* Mobile Tap Target Fix — Ad-Leak-Engine [SEED: 2399] */
+/* Location: Global stylesheet or theme CSS */
+/* Ensures all interactive elements meet the 48px minimum touch target */
+
+a, button, input[type="submit"], input[type="button"],
+[role="button"], .btn, .button, select {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px 16px;
+}
+
+/* Prevent adjacent tap targets from overlapping */
+a + a, button + button {
+    margin-left: 8px;
+}
+
+/* Ensure form inputs are easily tappable on mobile */
+@media (max-width: 768px) {
+    input, select, textarea {
+        min-height: 48px;
+        font-size: 16px; /* Prevents iOS zoom on focus */
+    }
+}

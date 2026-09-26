@@ -2,16 +2,57 @@
 
 ## Detected Leak
 - **Signal:** `{{ leak_signal }}`
+- **Tier:** {{ tier }}
 - **Recommendation:** {{ recommendation }}
 
-## What This Fix Does
-This fix restores accurate conversion tracking for your WooCommerce store.
-Without it, Meta cannot optimize for purchases, and your ad spend leaks.
+{% if tier == "L1" %}
+## Strategic Action Plan
 
-## Implementation
-Follow the code block provided alongside this guide. Always use a child
-theme so your changes survive theme updates.
+This finding relates to your **ad creative and campaign strategy**, not your tracking infrastructure. No code changes are required. The recommendations below are designed to improve your ad relevance, reduce CPM, and increase conversion rates through disciplined creative testing.
 
-## After Applying
-Place a test order and confirm the server-side event appears in Meta
-Events Manager within a few minutes.
+### Immediate Actions (This Week)
+1. Review the specific creative gap identified above.
+2. Implement the recommended change in Meta Ads Manager.
+3. Document the change for performance comparison.
+
+### Performance Monitoring (Next 14 Days)
+- Track CTR, CPM, and CPA in Meta Ads Manager before and after the change.
+- Allow at least 7 days of data collection before drawing conclusions.
+- Compare the performance of updated creatives against the previous baseline.
+
+### Why This Matters
+Creative and strategy leaks compound silently. Each day without correction inflates your effective CPA and erodes ROAS. Addressing this finding positions your campaigns for sustainable, scalable performance.
+
+{% elif tier == "L3" %}
+## Site Performance & UX Optimization
+
+This finding relates to your **landing page experience and site performance**. The fix below improves page speed, mobile usability, or conversion friction — all of which directly impact your Quality Score, CPM, and conversion rate.
+
+### Implementation
+Follow the code block provided alongside this guide. The exact file and location are specified in the code block metadata. If no code block is provided, the recommendation is a configuration or process change within your WooCommerce settings.
+
+### Expected Impact
+- Improved Core Web Vitals scores (LCP, FID, CLS)
+- Reduced mobile bounce rate
+- Higher conversion rate from paid traffic
+- Lower effective CPA due to improved Quality Score
+
+### Verification
+After applying the fix, re-run your landing page through Google PageSpeed Insights or Chrome DevTools Lighthouse to confirm the improvement.
+
+{% else %}
+## Tracking Infrastructure Restoration
+
+This fix restores your Meta tracking infrastructure so Meta's algorithm receives accurate, deduplicated conversion data. Without it, your ad spend optimizes against incomplete signals — inflating CPA and suppressing ROAS.
+
+### Implementation
+Follow the code block provided alongside this guide. The exact location to paste the code is specified in the code block metadata.
+
+### After Applying
+- Allow 24–48 hours for Meta to re-optimize with the restored data stream.
+- Monitor Meta Events Manager for incoming events and Event Match Quality.
+- Verify deduplication by comparing browser events against server events.
+
+### Business Impact
+Restored tracking enables Meta's algorithm to optimize toward actual conversions rather than proxy signals. This typically reduces CPA by 15–30% within the first optimization cycle.
+{% endif %}
