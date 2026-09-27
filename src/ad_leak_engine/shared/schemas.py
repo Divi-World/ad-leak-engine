@@ -53,8 +53,11 @@ class Page(BaseModel):
     first_seen: datetime
     last_scanned: datetime | None = None
     fingerprint: str | None = None
-    # Added raw dict to hold network logs, DOM snapshots, and L3 telemetry
     raw: dict = Field(default_factory=dict)
+    
+    # [SEED: 2399] Holy Grail: OAuth-granted actual metrics (optional, defaults to None)
+    actual_monthly_spend: float | None = None
+    actual_cpa: float | None = None
 
     @property
     def active_ads(self) -> list[RawAd]:
