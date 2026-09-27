@@ -31,12 +31,13 @@ class OutreachBuilder(AbstractOutreachBuilder):
         # Rank leaks by severity (highest first)
         leaks = sorted(leaks, key=lambda l: l.severity, reverse=True)
 
-        teardown_md = self._generate_teardown(page, leaks, fixes)
+        # Calculate recovery BEFORE generating teardown so it can be passed in
+        estimated_recovery = self._estimate_recovery(page, leaks)
+        teardown_md = self._generate_teardown(page, leaks, fixes, estimated_recovery)
         exec_summary = self.message_gen.generate_executive_summary(page, leaks)
         message_text = self.message_gen.generate_message(page, leaks, fixes)
 
         self.compliance.validate(message_text)
-        estimated_recovery = self._estimate_recovery(page, leaks)
 
         page_dir = self.output_dir / page.id
         page_dir.mkdir(parents=True, exist_ok=True)
@@ -62,9 +63,9 @@ class OutreachBuilder(AbstractOutreachBuilder):
             estimated_recovery=estimated_recovery,
         )
 
-    def _generate_teardown(self, page: Page, leaks: list[Leak], fixes: list[Fix]) -> str:
+    def _generate_teardown(self, page: Page, leaks: list[Leak], fixes: list[Fix], estimated_recovery: str) -> str:
         template = self.env.get_template("teardown.md.j2")
-        return template.render(page=page, leaks=leaks, fixes=fixes)
+        return template.render(page=page, leaks=leaks, fixes=fixes, estimated_recovery=estimated_recovery)
 
     def _estimate_recovery(self, page: Page, leaks: list[Leak]) -> str:
         # Get actual spend from Meta Ad Library
