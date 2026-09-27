@@ -36,7 +36,7 @@ class OutreachBuilder(AbstractOutreachBuilder):
         message_text = self.message_gen.generate_message(page, leaks, fixes)
 
         self.compliance.validate(message_text)
-        estimated_recovery = self._estimate_recovery(leaks)
+        estimated_recovery = self._estimate_recovery(page, leaks)
 
         page_dir = self.output_dir / page.id
         page_dir.mkdir(parents=True, exist_ok=True)
@@ -66,8 +66,28 @@ class OutreachBuilder(AbstractOutreachBuilder):
         template = self.env.get_template("teardown.md.j2")
         return template.render(page=page, leaks=leaks, fixes=fixes)
 
-    def _estimate_recovery(self, leaks: list[Leak]) -> str:
-        high_sev = sum(1 for l in leaks if l.severity >= 0.8)
-        med_sev = sum(1 for l in leaks if 0.5 <= l.severity < 0.8)
-        recovery = (high_sev * 1000) + (med_sev * 300)
-        return f"${recovery:,}/month potential recovery"
+    def _estimate_recovery(self, page: Page, leaks: list[Leak]) -> str:
+        # Get actual spend from Meta Ad Library
+        spend_range = page.total_estimated_spend
+        if not spend_range or spend_range == (0, 0):
+            # Fallback to generic multiplier if spend data unavailable
+            high_sev = sum(1 for l in leaks if l.severity >= 0.8)
+            med_sev = sum(1 for l in leaks if 0.5 <= l.severity < 0.8)
+            recovery = (high_sev * 1000) + (med_sev * 300)
+            return f"${recovery:,}/month potential recovery"
+        
+        # Calculate defensible recovery based on actual spend
+        spend_midpoint = (spend_range[0] + spend_range[1]) / 2
+        
+        # Industry standard: broken tracking inflates CPA by 15-30%
+        # Weight by leak severity
+        high_sev_count = sum(1 for l in leaks if l.severity >= 0.8)
+        med_sev_count = sum(1 for l in leaks if 0.5 <= l.severity < 0.8)
+        
+        # Conservative estimate: 20% CPA inflation per high-severity leak
+        # 10% CPA inflation per medium-severity leak
+        inflation_rate = (high_sev_count * 0.20) + (med_sev_count * 0.10)
+        inflation_rate = min(inflation_rate, 0.50)  # Cap at 50%
+        
+        recovery = spend_midpoint * inflation_rate
+        return f"${recovery:,.0f}/month potential recovery (based on ${spend_range[0]:,.0f}-${spend_range[1]:,.0f} Meta spend)"

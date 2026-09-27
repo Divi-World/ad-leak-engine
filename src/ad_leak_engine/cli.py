@@ -22,9 +22,10 @@ from .fix_forge.forge import FixForge
 from .outreach.bundle import OutreachBuilder
 from .persistence.db import init_db
 from .persistence.repository import AdRepository
-from .shared.schemas import Page
+from .shared.schemas import Page, Leak
 from .self_heal.human_browser import HumanBrowser
 from .shared.logging import get_logger
+from .shared.exceptions import PlatformAmbiguousError
 try:
     from .self_improve.effectiveness import track_fix_effectiveness
 except ImportError:
@@ -85,7 +86,22 @@ def cmd_scan(keyword: str, country: str, limit: int, skip_crawl: bool):
         leaks = list(l1.scan(page))
         print(f"[ALE]   L1 Leaks: {len(leaks)}")
         
-        if landing and not skip_crawl:
+        # Top 1 Polish: Detect invalid or geo-blocked URLs before fetching
+        is_invalid_url = False
+        if landing:
+            if not landing.startswith(("http://", "https://")) or "fbgeo" in landing or "facebook.com" in landing or "instagram.com" in landing:
+                is_invalid_url = True
+                print(f"[ALE]   Skipping crawl: Invalid or internal Meta URL detected.")
+                leaks.append(Leak(
+                    page_id=page.id, 
+                    tier="L3", 
+                    signal="invalid_landing_url", 
+                    severity=0.9, 
+                    recommendation="Landing page URL is invalid, internal, or geo-blocked. Fix the destination URL in Ads Manager.", 
+                    evidence={"url": landing}
+                ))
+
+        if landing and not skip_crawl and not is_invalid_url:
             try:
                 from .leak_scan.telemetry_collector import TelemetryCollector
                 print(f"[ALE]   Crawling landing page with stealth browser for L2/L3 telemetry...")
@@ -98,7 +114,7 @@ def cmd_scan(keyword: str, country: str, limit: int, skip_crawl: bool):
                 print(f"[ALE]   (L2/L3 crawl skipped: {e})")
 
         platform, conf = "custom", 0.3
-        if landing:
+        if landing and not is_invalid_url:
             print(f"[ALE]   Fetching HTML for platform fingerprinting...")
             html_content = _fetch_html_stealth(landing)
             if html_content:
@@ -110,6 +126,13 @@ def cmd_scan(keyword: str, country: str, limit: int, skip_crawl: bool):
         for leak in leaks:
             try:
                 fixes.append(forge.generate(leak, platform, conf))
+            except PlatformAmbiguousError:
+                # Top 1 Polish: Fallback to platform-agnostic custom fixes (GTM/Server-side)
+                logger.warning(f"Platform confidence {conf} too low for {platform}. Falling back to custom fixes.", extra={"stage": "fix_forge", "action": "fallback"})
+                try:
+                    fixes.append(forge.generate(leak, "custom", conf))
+                except Exception as e:
+                    logger.error(f"Custom fix generation also failed: {e}", extra={"stage": "fix_forge", "action": "generate"})
             except Exception as e:
                 logger.error(f"Fix generation failed: {e}", extra={"stage": "fix_forge", "action": "generate"})
                 continue
