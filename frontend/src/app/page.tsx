@@ -12,13 +12,23 @@ export default function Home() {
   const handleScan = async () => {
     if (!keyword) return;
     setIsScanning(true);
-    
-    // In Phase 28, this will connect to the FastAPI backend via axios
-    // For now, we simulate the enterprise loading state
-    setTimeout(() => {
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+      const response = await fetch(`${apiUrl}/scan/trigger`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword, country, limit }),
+      });
+
+      const data = await response.json();
+      alert(`Success: ${data.message}`);
+    } catch (error) {
+      console.error("Scan failed:", error);
+      alert("Failed to connect to backend. Ensure FastAPI is running on port 8000.");
+    } finally {
       setIsScanning(false);
-      alert("Scan initiated. Backend integration coming in Phase 28.");
-    }, 2000);
+    }
   };
 
   return (
