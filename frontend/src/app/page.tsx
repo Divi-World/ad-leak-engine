@@ -47,7 +47,10 @@ export default function Home() {
     try {
       const response = await fetch(`${apiUrl}/scan/trigger`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-API-Key": process.env.NEXT_PUBLIC_API_KEY || "dev_key_2399"
+        },
         body: JSON.stringify({ keyword, country, limit }),
       });
       const data = await response.json();
@@ -63,7 +66,7 @@ export default function Home() {
     if (!jobId || scanStatus === "completed" || scanStatus === "error") return;
     const poll = setInterval(async () => {
       try {
-        const response = await fetch(`${apiUrl}/scan/status/${jobId}`);
+        const response = await fetch(`${apiUrl}/scan/status/${jobId}`, { headers: { "X-API-Key": process.env.NEXT_PUBLIC_API_KEY || "dev_key_2399" } });
         const data = await response.json();
         if (data.status === "completed") {
           setResults(data.results || []);
@@ -96,7 +99,7 @@ export default function Home() {
     setTeardown("");
     setMessageText("");
     try {
-      const response = await fetch(`${apiUrl}/report/${jobId}/${res.page_id}`);
+      const response = await fetch(`${apiUrl}/report/${jobId}/${res.page_id}`, { headers: { "X-API-Key": process.env.NEXT_PUBLIC_API_KEY || "dev_key_2399" } });
       const data = await response.json();
       if (data.status === "ok") {
         setTeardown(data.teardown);
@@ -121,7 +124,10 @@ export default function Home() {
     try {
       const response = await fetch(`${apiUrl}/outreach/send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-API-Key": process.env.NEXT_PUBLIC_API_KEY || "dev_key_2399"
+        },
         body: JSON.stringify({
           email: prospectEmail,
           subject: `Found ${res.leak_count} revenue leaks in ${res.page_name} ads`,
