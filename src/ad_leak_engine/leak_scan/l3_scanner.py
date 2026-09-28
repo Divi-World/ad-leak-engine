@@ -90,7 +90,13 @@ def detect_broken_assets(network_log) -> bool:
     return any(req.get("status") == 404 for req in network_log.get("requests", []))
 
 def detect_mixed_content(html) -> bool:
-    return 'http://' in html and 'https://' in html # Simplified heuristic
+    """Top 1 detector: flag only real insecure http:// resources (src/href).
+    Ignores xmlns/w3.org namespaces, comments, and non-HTTPS pages."""
+    if not html or 'https://' not in html:
+        return False
+    import re as _re
+    pattern = _re.compile(r'(?:src|href)\s*=\s*["\']http://(?!www\.w3\.org)', _re.IGNORECASE)
+    return bool(pattern.search(html))
 
 def detect_no_ssl(url) -> bool:
     return url.startswith("http://")
