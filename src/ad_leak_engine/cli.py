@@ -44,6 +44,30 @@ def _fetch_html_stealth(url: str) -> str | None:
         logger.error(f"Stealth fetch failed: {e}", extra={"stage": "ingest", "action": "fetch_html"})
         return None
 
+def _fetch_html_resilient(url: str) -> str | None:
+    """Self-healing HTML acquisition: stealth -> early-commit retry -> plain HTTP."""
+    html = _fetch_html_stealth(url)
+    if html:
+        return html
+    hb = HumanBrowser(headless=True)
+    try:
+        with hb.session() as page:
+            page.goto(url, wait_until="commit", timeout=45000)
+            hb.human_pause(1.0, 2.0)
+            return page.content()
+    except Exception as e:
+        logger.error(f"Early-commit fetch failed: {e}", extra={"stage": "ingest", "action": "fetch_html_commit"})
+    try:
+        import httpx
+        resp = httpx.get(url, timeout=20.0, follow_redirects=True, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+        })
+        if resp.status_code == 200 and resp.text:
+            return resp.text
+    except Exception as e:
+        logger.error(f"Plain HTTP fetch failed: {e}", extra={"stage": "ingest", "action": "fetch_html_http"})
+    return None
+
 def cmd_scan(keyword: str, country: str, limit: int, skip_crawl: bool):
     logger.info(f"Initiating LIVE SCAN for '{keyword}'", extra={"stage": "orchestrator", "action": "scan_start"})
     print(f"[ALE] Initiating LIVE SCAN for '{keyword}' in {country}...")
@@ -101,25 +125,28 @@ def cmd_scan(keyword: str, country: str, limit: int, skip_crawl: bool):
                     evidence={"url": landing}
                 ))
 
+        html_content = None
+        platform, conf = "custom", 0.3
+        if landing and not is_invalid_url:
+            print(f"[ALE]   Fetching HTML for platform fingerprinting...")
+            html_content = _fetch_html_resilient(landing)
+            if html_content:
+                platform, conf = detector.detect(landing, html_content)
+            page.fingerprint = platform
+
         if landing and not skip_crawl and not is_invalid_url:
             try:
                 from .leak_scan.telemetry_collector import TelemetryCollector
                 print(f"[ALE]   Crawling landing page with stealth browser for L2/L3 telemetry...")
                 page.raw = TelemetryCollector().collect(landing)
+                if html_content:
+                    page.raw["html"] = html_content
                 l2_leaks, l3_leaks = l2.scan(page), l3.scan(page)
                 leaks += l2_leaks + l3_leaks
                 print(f"[ALE]   L2/L3 Leaks: {len(l2_leaks) + len(l3_leaks)}")
             except Exception as e:
                 logger.error(f"L2/L3 crawl failed: {e}", extra={"stage": "leak_scan", "action": "l2_l3_crawl"})
                 print(f"[ALE]   (L2/L3 crawl skipped: {e})")
-
-        platform, conf = "custom", 0.3
-        if landing and not is_invalid_url:
-            print(f"[ALE]   Fetching HTML for platform fingerprinting...")
-            html_content = _fetch_html_stealth(landing)
-            if html_content:
-                platform, conf = detector.detect(landing, html_content)
-            page.fingerprint = platform
         print(f"[ALE]   Platform: {platform} (confidence {conf:.2f})")
 
         fixes = []

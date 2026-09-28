@@ -7,13 +7,16 @@ FROM_EMAIL = os.getenv("FROM_EMAIL", "Ad-Leak-Engine <audit@adleakengine.com>")
 
 async def send_outreach_email(to_email: str, subject: str, message_text: str) -> dict:
     """Send an outreach email via Resend API."""
+    api_key = os.getenv("RESEND_API_KEY", "")
+    if not api_key:
+        return {"status": "error", "detail": "Email provider not configured. Set RESEND_API_KEY in the backend environment before sending."}
     url = "https://api.resend.com/emails"
     headers = {
-        "Authorization": f"Bearer {RESEND_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     payload = {
-        "from": FROM_EMAIL,
+        "from": os.getenv("FROM_EMAIL", "Ad-Leak-Engine <audit@adleakengine.com>"),
         "to": [to_email],
         "subject": subject,
         "text": message_text,
