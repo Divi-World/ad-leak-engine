@@ -73,6 +73,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
             leaks = list(l1.scan(page))
             platform, conf = "custom", 0.3
             html = None
+            # [SEED: 2399] Define before first use; no cross-iteration state leak
+            is_invalid = landing and (not landing.startswith(("http://", "https://")) or "fbgeo" in landing)
             if landing and not is_invalid:
                 try:
                     from ...cli import _fetch_html_resilient
@@ -84,18 +86,34 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 except Exception:
                     pass
             
-            is_invalid = landing and (not landing.startswith(("http://", "https://")) or "fbgeo" in landing)
-            if landing and not is_invalid:
+            # [SEED: 2399] Evidence snapshot reuse (shared store, 24h TTL) => bit-identical re-audits
+            os.makedirs("output/_evidence", exist_ok=True)
+            snapshot_path = f"output/_evidence/{page_id}.json"
+            evidence_mode = "live"
+            use_snapshot = False
+            if os.path.exists(snapshot_path):
+                import time as _time
+                if _time.time() - os.path.getmtime(snapshot_path) < 86400:
+                    try:
+                        with open(snapshot_path, "r", encoding="utf-8") as sf:
+                            page.raw = json.load(sf)
+                        use_snapshot = True
+                        evidence_mode = "snapshot"
+                    except Exception:
+                        pass
+            if not use_snapshot and landing and not is_invalid:
                 try:
                     from ...leak_scan.telemetry_collector import TelemetryCollector
                     page.raw = TelemetryCollector().collect(landing)
                     if html:
                         page.raw["html"] = html
-                    leaks += l2.scan(page) + l3.scan(page)
-                    _write_status(job_id, {"status": "running", "progress": min(95, 45 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: L2/L3 telemetry captured"})
-
+                    with open(snapshot_path, "w", encoding="utf-8") as sf:
+                        json.dump(page.raw, sf, default=str)
+                    _write_status(job_id, {"status": "running", "progress": min(95, 45 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: L2/L3 telemetry captured (live)"})
                 except Exception:
                     pass
+            if page.raw:
+                leaks += l2.scan(page) + l3.scan(page)
                     
                     
             fixes = []
@@ -117,7 +135,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "confidence": conf,
                 "leak_count": len(leaks),
                 "estimated_recovery": pack.estimated_recovery,
-                "teardown_path": f"output/{job_id}/{page_id}/teardown.md"
+                "teardown_path": f"output/{job_id}/{page_id}/teardown.md",
+                "evidence_mode": evidence_mode
             })
             processed += 1
             

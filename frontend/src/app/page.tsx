@@ -11,6 +11,7 @@ type ScanResult = {
   confidence: number;
   leak_count: number;
   estimated_recovery: string;
+  evidence_mode?: string;
 };
 
 export default function Home() {
@@ -220,6 +221,7 @@ export default function Home() {
                     <div>
                       <h4 className="text-xl font-bold text-white">{res.page_name}</h4>
                       <p className="text-zinc-400 text-sm capitalize">Platform: {res.platform} (Confidence: {(res.confidence * 100).toFixed(0)}%)</p>
+                      <p className="text-xs text-zinc-500 mt-1 font-medium">Evidence: {res.evidence_mode === 'snapshot' ? 'snapshot (24h cached)' : 'live capture'}</p>
                     </div>
                   </div>
                   <div className="text-right">

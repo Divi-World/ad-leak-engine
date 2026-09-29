@@ -9,6 +9,15 @@ class MobileUXAnalyzer:
             with hb.session() as page:
                 page.goto(url, wait_until="load", timeout=timeout_ms)
                 hb.human_pause(2.0, 3.0)
+                # [SEED: 2399] Determinize DOM: settle network + force lazy-load before measuring
+                try:
+                    page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(1500)
+                page.evaluate("window.scrollTo(0, 0)")
+                hb.human_pause(1.0, 1.5)
 
                 min_tap = page.evaluate(
                     "() => { const els = Array.from(document.querySelectorAll('a,button,input,select,[role=button]'));"
