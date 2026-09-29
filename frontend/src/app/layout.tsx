@@ -12,8 +12,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
-      <body className="bg-zinc-950 text-zinc-100 antialiased min-h-screen">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('ale_theme')||'dark';var f=localStorage.getItem('ale_font')||'base';if(t==='dark')document.documentElement.classList.add('dark');document.documentElement.style.fontSize=f==='small'?'14px':f==='large'?'18px':'16px';}catch(e){}})()` }} />
+      </head>
+      <body className="bg-[var(--background)] text-[var(--foreground)] antialiased min-h-screen transition-colors">
         <main className="container mx-auto px-4 py-8 max-w-6xl">
           {children}
         </main>

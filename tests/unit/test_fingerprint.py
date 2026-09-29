@@ -15,7 +15,7 @@ def detector():
 def test_shopify_detection(detector):
     """Shopify HTML with 3+ primary markers should return 0.95 confidence."""
     html = (FIXTURES_DIR / "sample_html_shopify.html").read_text()
-    platform, confidence = detector.detect("https://test-store.myshopify.com", html)
+    platform, confidence, _evidence = detector.detect("https://test-store.myshopify.com", html)
     assert platform == "shopify"
     assert confidence >= 0.95
 
@@ -23,7 +23,7 @@ def test_shopify_detection(detector):
 def test_woocommerce_detection(detector):
     """WooCommerce HTML with 2 primary + secondary markers should return 0.92."""
     html = (FIXTURES_DIR / "sample_html_woo.html").read_text()
-    platform, confidence = detector.detect("https://example.com", html)
+    platform, confidence, _evidence = detector.detect("https://example.com", html)
     assert platform == "woocommerce"
     assert confidence >= 0.92
 
@@ -31,7 +31,7 @@ def test_woocommerce_detection(detector):
 def test_custom_fallback(detector):
     """Unknown HTML should return custom with 0.3 confidence."""
     html = "<html><body><h1>Generic Custom Site</h1></body></html>"
-    platform, confidence = detector.detect("https://example.com", html)
+    platform, confidence, _evidence = detector.detect("https://example.com", html)
     assert platform == "custom"
     assert confidence == 0.3
 
@@ -44,7 +44,7 @@ def test_bigcommerce_detection(detector):
     <body><div class="bc-cart">Cart</div></body>
     </html>
     """
-    platform, confidence = detector.detect("https://store.com", html)
+    platform, confidence, _evidence = detector.detect("https://store.com", html)
     assert platform == "bigcommerce"
     assert confidence >= 0.90
 
@@ -57,7 +57,7 @@ def test_webflow_detection(detector):
     <body><a class="w-webflow-badge" href="https://webflow.com">Built with Webflow</a></body>
     </html>
     """
-    platform, confidence = detector.detect("https://site.com", html)
+    platform, confidence, _evidence = detector.detect("https://site.com", html)
     assert platform == "webflow"
     assert confidence >= 0.90
 
@@ -66,7 +66,7 @@ def test_header_based_detection(detector):
     """Platform can be detected from HTTP headers alone."""
     html = "<html><body>Minimal</body></html>"
     headers = {"X-ShopId": "12345678", "X-Shopify-Theme": "dawn"}
-    platform, confidence = detector.detect("https://store.com", html, headers)
+    platform, confidence, _evidence = detector.detect("https://store.com", html, headers)
     assert platform == "shopify"
     assert confidence > 0.3
 
@@ -84,6 +84,15 @@ def test_confidence_scoring_rules():
 
 def test_empty_html_returns_custom(detector):
     """Empty or None HTML should return custom fallback."""
-    platform, confidence = detector.detect("https://example.com", None)
+    platform, confidence, _evidence = detector.detect("https://example.com", None)
     assert platform == "custom"
     assert confidence == 0.3
+
+
+def test_evidence_markers_returned(detector):
+    """[SEED: 2399] detect() must return matched markers for auditability."""
+    html = (FIXTURES_DIR / "sample_html_shopify.html").read_text()
+    platform, confidence, evidence = detector.detect("https://test-store.myshopify.com", html)
+    assert platform == "shopify"
+    assert isinstance(evidence, list)
+    assert len(evidence) > 0

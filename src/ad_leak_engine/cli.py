@@ -131,7 +131,7 @@ def cmd_scan(keyword: str, country: str, limit: int, skip_crawl: bool):
             print(f"[ALE]   Fetching HTML for platform fingerprinting...")
             html_content = _fetch_html_resilient(landing)
             if html_content:
-                platform, conf = detector.detect(landing, html_content)
+                platform, conf, _evidence = detector.detect(landing, html_content)
             page.fingerprint = platform
 
         if landing and not skip_crawl and not is_invalid_url:

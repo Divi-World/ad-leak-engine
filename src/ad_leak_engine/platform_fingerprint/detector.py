@@ -19,18 +19,35 @@ class PlatformDetector(AbstractPlatformDetector):
 
         best_platform = CUSTOM_PLATFORM
         best_confidence = CUSTOM_CONFIDENCE
+        best_evidence = []
 
         for platform, sigs in PLATFORM_SIGNATURES.items():
             primary_hits = self._count_primary_hits(sigs["primary"], html, headers)
             secondary_hits = self._count_secondary_hits(sigs["secondary"], html, headers)
+            # [SEED: 2399] Track which markers actually matched for auditability
+            matched_markers = self._collect_matched_markers(sigs["primary"] + sigs["secondary"], html, headers)
 
             confidence = calculate_confidence(primary_hits, secondary_hits)
 
             if confidence > best_confidence:
                 best_confidence = confidence
                 best_platform = platform
+                best_evidence = matched_markers
 
-        return (best_platform, best_confidence)
+        return (best_platform, best_confidence, best_evidence)
+
+    def _collect_matched_markers(self, markers: list[str], html: str, headers: dict) -> list[str]:
+        """Return list of markers that actually matched (for evidence/audit)."""
+        matched = []
+        for marker in markers:
+            if marker.lower() in html.lower():
+                matched.append(marker)
+                continue
+            for header_key, header_value in headers.items():
+                if marker.lower() in header_key.lower() or marker.lower() in str(header_value).lower():
+                    matched.append(f"{header_key}: {marker}")
+                    break
+        return matched
 
     def _count_primary_hits(self, markers: list[str], html: str, headers: dict) -> int:
         """Count primary marker hits in HTML and headers."""

@@ -35,7 +35,7 @@ def test_end_to_end_pipeline(tmp_path):
     
     # 4. Fingerprint
     html = '<html><script src="https://cdn.shopify.com/s/files/1/0000/0001/themes/theme.css"></script><script>Shopify.theme = {};</script></html>'
-    platform, conf = PlatformDetector().detect("https://ecom.com", html)
+    platform, conf, _evidence = PlatformDetector().detect("https://ecom.com", html)
     assert platform == "shopify", "Pipeline failed to fingerprint Shopify"
     
     # 5. Forge Fixes

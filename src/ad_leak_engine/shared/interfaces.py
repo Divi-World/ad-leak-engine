@@ -33,8 +33,8 @@ class AbstractPlatformDetector(ABC):
     """Fingerprint stage: identifies the e-commerce platform."""
 
     @abstractmethod
-    def detect(self, url: str, html: str | None = None, headers: dict | None = None) -> tuple[str, float]:
-        """Return (platform_name, confidence_score)."""
+    def detect(self, url: str, html: str | None = None, headers: dict | None = None) -> tuple[str, float, list[str]]:
+        """Return (platform_name, confidence_score, matched_markers)."""
 
 
 class AbstractFixGenerator(ABC):

@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc; /* Premium Slate 50 (cool on eyes) */
+  --foreground: #0f172a; /* Premium Slate 900 */
+}
+
+.dark {
+  --background: #09090b; /* Zinc 950 */
+  --foreground: #fafafa; /* Zinc 50 */
 }
 
 @theme inline {
@@ -12,15 +19,65 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* [SEED: 2399] System-preference block removed: theme is user-controlled via .dark class only. */
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
+
+
+/* [SEED: 2399] Premium Light Mode Overrides for hardcoded dark UI */
+html:not(.dark) .bg-zinc-900 { background-color: #ffffff; }
+html:not(.dark) .bg-zinc-950 { background-color: #f8fafc; }
+html:not(.dark) .bg-zinc-800 { background-color: #f1f5f9; }
+html:not(.dark) .bg-zinc-900\/50 { background-color: rgba(255, 255, 255, 0.8); }
+html:not(.dark) .bg-zinc-950\/60 { background-color: rgba(248, 250, 252, 0.9); }
+html:not(.dark) .border-zinc-800 { border-color: #e2e8f0; }
+html:not(.dark) .border-zinc-700 { border-color: #cbd5e1; }
+html:not(.dark) .text-white { color: #0f172a; }
+html:not(.dark) .text-zinc-100 { color: #1e293b; }
+html:not(.dark) .text-zinc-200 { color: #334155; }
+html:not(.dark) .text-zinc-300 { color: #475569; }
+html:not(.dark) .text-zinc-400 { color: #64748b; }
+html:not(.dark) .text-zinc-500 { color: #94a3b8; }
+html:not(.dark) .shadow-black\/20 { --tw-shadow-color: rgba(0,0,0,0.05); }
+
+/* [SEED: 2399] Premium Light Mode - completion layer */
+html:not(.dark) body { color: #0f172a; }
+html:not(.dark) .disabled\:bg-zinc-800:disabled { background-color: #e2e8f0; }
+html:not(.dark) .disabled\:text-zinc-500:disabled { color: #64748b; }
+html:not(.dark) .hover\:bg-zinc-700:hover { background-color: #e2e8f0; }
+html:not(.dark) .hover\:bg-zinc-200:hover { background-color: #e2e8f0; }
+html:not(.dark) .bg-blue-600.text-white, html:not(.dark) .bg-purple-600.text-white { color: #ffffff; }
+html:not(.dark) .bg-blue-600\/20 { background-color: #dbeafe; }
+html:not(.dark) .bg-blue-500 { background-color: #2563eb; }
+html:not(.dark) .bg-red-900\/20 { background-color: #fef2f2; }
+html:not(.dark) .bg-black\/70 { background-color: rgba(15, 23, 42, 0.5); }
+html:not(.dark) .border-red-800 { border-color: #fecaca; }
+html:not(.dark) .border-blue-500\/30 { border-color: #bfdbfe; }
+html:not(.dark) .border-blue-500\/50 { border-color: #93c5fd; }
+html:not(.dark) .border-zinc-200 { border-color: #e2e8f0; }
+html:not(.dark) .text-blue-400 { color: #1d4ed8; }
+html:not(.dark) .text-blue-300 { color: #1e40af; }
+html:not(.dark) .text-emerald-300 { color: #047857; }
+html:not(.dark) .text-green-400 { color: #16a34a; }
+html:not(.dark) .text-green-500 { color: #16a34a; }
+html:not(.dark) .text-red-400 { color: #dc2626; }
+html:not(.dark) .text-yellow-500 { color: #b45309; }
+html:not(.dark) .text-zinc-700 { color: #334155; }
+html:not(.dark) .text-zinc-900 { color: #0f172a; }
+html:not(.dark) .bg-zinc-100 { background-color: #f1f5f9; }
+/* [SEED: 2399] Premium finish layer */
+html:not(.dark) .shadow-2xl { box-shadow: 0 10px 30px rgba(2, 6, 23, 0.08); }
+html:not(.dark) input { background-color: #ffffff; }
+html:not(.dark) .bg-blue-600 { background-color: #2563eb; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25); }
+html:not(.dark) .bg-purple-600 { background-color: #9333ea; box-shadow: 0 4px 14px rgba(147, 51, 234, 0.25); }
+html:not(.dark) .disabled\:bg-zinc-800:disabled { box-shadow: none; }
+html:not(.dark) ::selection { background: #bfdbfe; }
+.dark ::selection { background: #1e3a8a; }
+html:not(.dark) .text-zinc-600 { color: #475569; }
+html:not(.dark) .hover\:border-blue-500\/50:hover { border-color: #93c5fd; }
+
+

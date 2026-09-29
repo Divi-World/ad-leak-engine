@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { Search, Loader2, ShieldCheck, Zap, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Copy, Mail, Check } from "lucide-react";
+import { Search, Loader2, ShieldCheck, Zap, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Copy, Mail, Check, Settings, Sun, Moon, Key } from "lucide-react";
 
 type ScanResult = {
   page_id: string;
@@ -12,6 +12,7 @@ type ScanResult = {
   leak_count: number;
   estimated_recovery: string;
   evidence_mode?: string;
+  platform_evidence?: string[];
 };
 
 export default function Home() {
@@ -34,6 +35,9 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("Initializing stealth swarm...");
   const [jobs, setJobs] = useState<any[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [fontSize, setFontSize] = useState<'small' | 'base' | 'large'>('base');
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -48,6 +52,27 @@ export default function Home() {
   };
 
   useEffect(() => { loadJobs(); }, []);
+
+  useEffect(() => {
+    const st = (localStorage.getItem('ale_theme') as 'dark' | 'light') || 'dark';
+    const sf = (localStorage.getItem('ale_font') as 'small' | 'base' | 'large') || 'base';
+    setTheme(st); setFontSize(sf);
+    if(st === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+    document.documentElement.style.fontSize = sf === 'small' ? '14px' : sf === 'large' ? '18px' : '16px';
+  }, []);
+
+  const applyTheme = (t: 'dark' | 'light') => {
+    if(t === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+    localStorage.setItem('ale_theme', t);
+    setTheme(t);
+  };
+  const applyFont = (f: 'small' | 'base' | 'large') => {
+    document.documentElement.style.fontSize = f === 'small' ? '14px' : f === 'large' ? '18px' : '16px';
+    localStorage.setItem('ale_font', f);
+    setFontSize(f);
+  };
 
   const handleScan = async () => {
     if (!keyword) return;
@@ -181,6 +206,14 @@ export default function Home() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white">Ad-Leak-Engine</h1>
           <span className="px-2 py-0.5 text-xs font-medium bg-zinc-800 text-zinc-400 rounded-full border border-zinc-700">SEED: 2399</span>
+          <div className="ml-auto flex gap-2">
+            <button onClick={() => window.open(`${apiUrl.replace('/api/v1','')}/api/v1/auth/meta/login`, '_blank', 'width=600,height=700')} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all" title="Connect Meta for deep spend analysis">
+              <Key className="w-3.5 h-3.5" /> Give Full Access
+            </button>
+            <button onClick={() => setSettingsOpen(true)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-all" title="Preferences">
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
         </div>
         <p className="text-zinc-400 text-lg max-w-2xl">
           Enterprise-grade Meta ad infrastructure auditing. Identify tracking leaks, generate platform-specific fixes, and recover lost ROAS.
@@ -199,7 +232,10 @@ export default function Home() {
           </div>
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-2">Country</label>
-            <input type="text" value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} maxLength={2} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+            <input list="ale-countries" type="text" value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} maxLength={2} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/50" placeholder="Type or select..." />
+            <datalist id="ale-countries">
+              <option value="US">United States</option><option value="CA">Canada</option><option value="GB">United Kingdom</option><option value="AU">Australia</option><option value="DE">Germany</option><option value="FR">France</option><option value="IT">Italy</option><option value="ES">Spain</option><option value="BR">Brazil</option><option value="MX">Mexico</option><option value="IN">India</option><option value="JP">Japan</option><option value="KR">South Korea</option><option value="NL">Netherlands</option><option value="SE">Sweden</option><option value="NO">Norway</option><option value="DK">Denmark</option><option value="FI">Finland</option><option value="PL">Poland</option><option value="ZA">South Africa</option><option value="NG">Nigeria</option><option value="AE">United Arab Emirates</option><option value="SA">Saudi Arabia</option><option value="EG">Egypt</option><option value="IL">Israel</option><option value="TR">Turkey</option><option value="UA">Ukraine</option><option value="AR">Argentina</option><option value="CL">Chile</option><option value="CO">Colombia</option><option value="PE">Peru</option><option value="PH">Philippines</option><option value="ID">Indonesia</option><option value="TH">Thailand</option><option value="VN">Vietnam</option><option value="MY">Malaysia</option><option value="SG">Singapore</option><option value="NZ">New Zealand</option><option value="IE">Ireland</option><option value="PT">Portugal</option><option value="BE">Belgium</option><option value="CH">Switzerland</option><option value="AT">Austria</option><option value="GR">Greece</option><option value="CZ">Czech Republic</option><option value="HU">Hungary</option><option value="RO">Romania</option>
+            </datalist>
           </div>
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-2">Limit</label>
@@ -234,6 +270,9 @@ export default function Home() {
                     <div>
                       <h4 className="text-xl font-bold text-white">{res.page_name}</h4>
                       <p className="text-zinc-400 text-sm capitalize">Platform: {res.platform} (Confidence: {(res.confidence * 100).toFixed(0)}%)</p>
+                      {res.platform_evidence && res.platform_evidence.length > 0 && (
+                        <p className="text-xs text-emerald-500 dark:text-emerald-400 mt-0.5 font-medium">Verified by: {res.platform_evidence.slice(0, 3).join(', ')}{res.platform_evidence.length > 3 ? ` +${res.platform_evidence.length - 3} more` : ''}</p>
+                      )}
                       <p className="text-xs text-zinc-500 mt-1 font-medium">Evidence: {res.evidence_mode === 'snapshot' ? 'snapshot (24h cached)' : 'live capture'}</p>
                     </div>
                   </div>
@@ -310,6 +349,32 @@ export default function Home() {
         <div className="bg-red-900/20 border border-red-800 rounded-xl p-6 text-center">
           <p className="text-red-400 font-semibold">{errorDetail ? `Scan ended: ${errorDetail}.` : "Scan failed. Please check backend logs or try a different keyword."}</p>
           <p className="text-zinc-400 text-sm mt-2">Tip: the niche must have active Meta ads in the selected country. Try a broader keyword or another country code.</p>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setSettingsOpen(false)}>
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2"><Settings className="w-5 h-5" /> Preferences</h3>
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Theme</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => applyTheme('light')} className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${theme==='light'?'bg-blue-600 text-white':'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}><Sun className="w-4 h-4" /> Light</button>
+                  <button onClick={() => applyTheme('dark')} className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${theme==='dark'?'bg-blue-600 text-white':'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}><Moon className="w-4 h-4" /> Dark</button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Font Size</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => applyFont('small')} className={`px-3 py-2 rounded-lg text-xs font-medium ${fontSize==='small'?'bg-blue-600 text-white':'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}>Small</button>
+                  <button onClick={() => applyFont('base')} className={`px-3 py-2 rounded-lg text-sm font-medium ${fontSize==='base'?'bg-blue-600 text-white':'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}>Medium</button>
+                  <button onClick={() => applyFont('large')} className={`px-3 py-2 rounded-lg text-base font-medium ${fontSize==='large'?'bg-blue-600 text-white':'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}>Large</button>
+                </div>
+              </div>
+            </div>
+            <button onClick={() => setSettingsOpen(false)} className="mt-6 w-full px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-lg text-sm font-medium">Close</button>
+          </div>
         </div>
       )}
     </div>

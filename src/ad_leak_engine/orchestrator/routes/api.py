@@ -71,7 +71,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
 
             
             leaks = list(l1.scan(page))
-            platform, conf = "custom", 0.3
+            platform, conf, platform_evidence = "custom", 0.3, []
             html = None
             # [SEED: 2399] Define before first use; no cross-iteration state leak
             is_invalid = landing and (not landing.startswith(("http://", "https://")) or "fbgeo" in landing)
@@ -80,7 +80,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                     from ...cli import _fetch_html_resilient
                     html = _fetch_html_resilient(landing)
                     if html:
-                        platform, conf = detector.detect(landing, html)
+                        platform, conf, platform_evidence = detector.detect(landing, html)
                         _write_status(job_id, {"status": "running", "progress": min(95, 58 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: platform fingerprinted as {platform}"})
 
                 except Exception:
@@ -136,7 +136,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "leak_count": len(leaks),
                 "estimated_recovery": pack.estimated_recovery,
                 "teardown_path": f"output/{job_id}/{page_id}/teardown.md",
-                "evidence_mode": evidence_mode
+                "evidence_mode": evidence_mode,
+                "platform_evidence": platform_evidence
             })
             processed += 1
             
