@@ -33,8 +33,21 @@ export default function Home() {
   const [errorDetail, setErrorDetail] = useState<string>("");
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("Initializing stealth swarm...");
+  const [jobs, setJobs] = useState<any[]>([]);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+  const loadJobs = async () => {
+    try {
+      const response = await fetch(`${apiUrl}/jobs`, { headers: { "X-API-Key": process.env.NEXT_PUBLIC_API_KEY || "dev_key_2399" } });
+      const data = await response.json();
+      if (data.status === "ok") setJobs(data.jobs || []);
+    } catch (error) {
+      console.error("History load failed:", error);
+    }
+  };
+
+  useEffect(() => { loadJobs(); }, []);
 
   const handleScan = async () => {
     if (!keyword) return;
@@ -256,6 +269,10 @@ export default function Home() {
                       </button>
                     </div>
                     <pre className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-xs text-zinc-300 whitespace-pre-wrap max-h-64 overflow-y-auto">{messageText}</pre>
+                    <div className="flex gap-2">
+                      <button onClick={() => { const blob = new Blob([teardown], { type: "text/markdown" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "teardown.md"; a.click(); URL.revokeObjectURL(url); }} className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-medium text-white transition-all">Download Teardown (.md)</button>
+                      <button onClick={() => { const blob = new Blob([messageText], { type: "text/plain" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "message.txt"; a.click(); URL.revokeObjectURL(url); }} className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-medium text-white transition-all">Download Message (.txt)</button>
+                    </div>
                     <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
                       <h5 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2"><Mail className="w-4 h-4" /> Dispatch Outreach</h5>
                       <input type="email" value={prospectEmail} onChange={(e) => setProspectEmail(e.target.value)} placeholder="prospect@company.com" className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
@@ -271,6 +288,22 @@ export default function Home() {
             </div>
           ))}
         </div>
+      )}
+
+      {jobs.length > 0 && (
+        <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          <h2 className="text-lg font-semibold mb-4 text-white">Recent Audit History</h2>
+          <div className="grid gap-2">
+            {jobs.slice(0, 8).map((j: any) => (
+              <button key={j.job_id} onClick={() => { setResults(j.results || []); setJobId(j.job_id); setScanStatus("completed"); setIsScanning(false); }} className="text-left px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-lg hover:border-blue-500/50 transition-all">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-zinc-200">{j.job_id.slice(0, 8)}… • {j.pages} page(s)</span>
+                  <span className={`text-xs font-semibold ${j.status === "completed" ? "text-green-400" : j.status === "error" ? "text-red-400" : "text-yellow-400"}`}>{j.status}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
       )}
 
       {scanStatus === "error" && (

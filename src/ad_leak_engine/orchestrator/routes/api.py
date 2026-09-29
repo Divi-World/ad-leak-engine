@@ -157,6 +157,31 @@ async def trigger_scan(request: ScanRequest, background_tasks: BackgroundTasks) 
     background_tasks.add_task(run_scan_pipeline, job_id, request.keyword, request.country, request.limit)
     return {"status": "accepted", "job_id": job_id, "message": "Scan initiated"}
 
+@router.get("/jobs")
+def list_jobs() -> dict:
+    """[SEED: 2399] Scan history: recent jobs with status + results summaries."""
+    base = Path("output")
+    jobs = []
+    if base.exists():
+        for d in sorted(base.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+            if d.is_dir() and d.name != "_evidence":
+                sf = d / "status.json"
+                if sf.exists():
+                    try:
+                        with open(sf, "r", encoding="utf-8") as f:
+                            st = json.load(f)
+                        jobs.append({
+                            "job_id": d.name,
+                            "status": st.get("status", "unknown"),
+                            "pages": len(st.get("results", [])),
+                            "results": st.get("results", []),
+                        })
+                    except Exception:
+                        continue
+            if len(jobs) >= 20:
+                break
+    return {"status": "ok", "jobs": jobs}
+
 @router.get("/scan/status/{job_id}")
 def get_scan_status(job_id: str) -> dict:
     status_file = Path(f"output/{job_id}/status.json")
