@@ -66,6 +66,14 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 
             page_name = page_ads[0].page_name
             landing = next((a.landing_url for a in page_ads if a.landing_url), None)
+            
+            # [SEED: 2399] Enterprise Walled-Garden Filter (Skip non-SMB targets)
+            walled_gardens = ["amazon.", "alibaba.", "walmart.", "target.", "ebay.", "etsy.com", "tiktok.com", "facebook.com", "instagram.com", "youtube.com", "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", "homedepot.com", "lowes.com"]
+            is_walled_garden = any(wg in (landing or "").lower() or wg in page_name.lower() for wg in walled_gardens)
+            if is_walled_garden:
+                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
+                continue
+
             page = Page(id=page_id, name=page_name, url=landing, ads=page_ads, first_seen=datetime.now(timezone.utc))
             _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name} ({processed + 1}/{limit}): L1 creative scan"})
 
@@ -95,14 +103,14 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                         discovered_emails = list(set([e for e in raw_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]))[:5]
                         
                         if not discovered_emails:
-                            contact_paths = ["/contact", "/about", "/imprint", "/contact-us"]
+                            contact_paths = ["/contact", "/about", "/imprint", "/contact-us", "/pages/contact-us", "/policies/privacy-policy"]
+                            from ...cli import _fetch_html_stealth
                             for path in contact_paths:
                                 try:
                                     contact_url = f"https://{domain_lower}{path}"
-                                    import httpx
-                                    resp = httpx.get(contact_url, timeout=10.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
-                                    if resp.status_code == 200:
-                                        raw_emails_deep = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', resp.text)
+                                    contact_html = _fetch_html_stealth(contact_url)
+                                    if contact_html:
+                                        raw_emails_deep = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', contact_html)
                                         discovered_emails = list(set([e for e in raw_emails_deep if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]))[:5]
                                         if discovered_emails: break
                                 except Exception: pass
