@@ -74,18 +74,46 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
             platform, conf, platform_evidence = "custom", 0.3, []
             html = None
             discovered_emails = []
+            audit_status = "success"
             # [SEED: 2399] Define before first use; no cross-iteration state leak
             is_invalid = landing and (not landing.startswith(("http://", "https://")) or "fbgeo" in landing)
+            
+            # [SEED: 2399] Relevance Gate: Drop mega-brands and non-niche platforms
+            mega_brand_blacklist = ["tiktok", "facebook", "instagram", "amazon", "wikipedia", "youtube", "twitter", "x.com", "linkedin"]
+            is_mega_brand = any(b in page_name.lower() or b in (landing or "").lower() for b in mega_brand_blacklist)
+            if is_mega_brand:
+                _write_status(job_id, {"status": "running", "stage": f"Skipping {page_name} (Mega-brand/Platform detected)"})
+                continue
             if landing and not is_invalid:
                 try:
                     from ...cli import _fetch_html_resilient
                     html = _fetch_html_resilient(landing)
+                    if not html and landing and not is_invalid:
+                        audit_status = "blocked"
                     if html:
                         platform, conf, platform_evidence = detector.detect(landing, html)
                         # [SEED: 2399] Contact Discovery
                         import re as _re_discover
                         raw_emails = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
                         discovered_emails = list(set([e for e in raw_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css'))]))[:5]
+                        
+                        # [SEED: 2399] Deep Contact Crawler
+                        if not discovered_emails and landing:
+                            from urllib.parse import urlparse
+                            domain = urlparse(landing).netloc
+                            contact_paths = ["/contact", "/about", "/imprint", "/contact-us"]
+                            for path in contact_paths:
+                                try:
+                                    contact_url = f"https://{domain}{path}"
+                                    import httpx
+                                    resp = httpx.get(contact_url, timeout=10.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+                                    if resp.status_code == 200:
+                                        raw_emails_deep = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', resp.text)
+                                        discovered_emails = list(set([e for e in raw_emails_deep if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css'))]))[:5]
+                                        if discovered_emails:
+                                            break
+                                except Exception:
+                                    pass
                         _write_status(job_id, {"status": "running", "progress": min(95, 58 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: platform fingerprinted as {platform}"})
 
                 except Exception:
@@ -143,7 +171,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "teardown_path": f"output/{job_id}/{page_id}/teardown.md",
                 "evidence_mode": evidence_mode,
                 "platform_evidence": platform_evidence,
-                "discovered_emails": discovered_emails
+                "discovered_emails": discovered_emails,
+                "audit_status": audit_status
             })
             processed += 1
             
