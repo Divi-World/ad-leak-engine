@@ -67,8 +67,14 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
             page_name = page_ads[0].page_name
             landing = next((a.landing_url for a in page_ads if a.landing_url), None)
             
-            # [SEED: 2399] Enterprise Walled-Garden Filter (Skip non-SMB targets)
-            walled_gardens = ["amazon.", "alibaba.", "walmart.", "target.", "ebay.", "etsy.com", "tiktok.com", "facebook.com", "instagram.com", "youtube.com", "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", "homedepot.com", "lowes.com"]
+            # [SEED: 2399] Aggressive Enterprise Walled-Garden Filter & Invalid URL Rejection
+            is_invalid_protocol = landing and not landing.startswith(("http://", "https://"))
+            if is_invalid_protocol:
+                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Invalid URL protocol)"})
+                continue
+
+            # Check against broad enterprise keywords (no TLD required)
+            walled_gardens = ["amazon", "alibaba", "walmart", "target.", "ebay.", "etsy.com", "tiktok", "facebook.com", "instagram.com", "youtube.com", "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", "homedepot.com", "lowes.com", "olive young", "neutrogena", "reitmans"]
             is_walled_garden = any(wg in (landing or "").lower() or wg in page_name.lower() for wg in walled_gardens)
             if is_walled_garden:
                 _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
@@ -147,6 +153,18 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                                         
                                         discovered_emails = list(set(cleaned))[:5]
                                         if discovered_emails: break
+                                except Exception: pass
+                        
+                        # [SEED: 2399] Contact Form Fallback (If no email found, provide the form URL)
+                        if not discovered_emails:
+                            for path in ["/contact", "/pages/contact-us", "/contact-us", "/about", "/policies/privacy-policy"]:
+                                try:
+                                    form_url = f"https://{domain_lower}{path}"
+                                    import httpx
+                                    r = httpx.head(form_url, timeout=5.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+                                    if r.status_code == 200:
+                                        discovered_emails = [f"FORM:{form_url}"]
+                                        break
                                 except Exception: pass
                         
                         # [SEED: 2399] Tier-4: DNS MX + SMTP RCPT verified role contacts (Hunter-class)

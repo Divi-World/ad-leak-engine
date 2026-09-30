@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { Search, Loader2, ShieldCheck, Zap, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Copy, Mail, Check, Settings, Sun, Moon, Key } from "lucide-react";
+import { Search, Loader2, ShieldCheck, Zap, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Copy, Mail, Check, Settings, Sun, Moon, Key, ExternalLink } from "lucide-react";
 
 type ScanResult = {
   page_id: string;
@@ -374,9 +374,15 @@ export default function Home() {
                           <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-1.5">Verified Contacts (Click to use):</p>
                           <div className="flex flex-wrap gap-1.5">
                             {res.discovered_emails.map((email, idx) => (
-                              <button key={idx} type="button" onClick={() => setProspectEmail(email)} className="px-2 py-1 bg-emerald-900/30 border border-emerald-700/50 text-emerald-300 text-xs rounded hover:bg-emerald-800/40 transition-colors flex items-center gap-1">
-                                <Mail className="w-3 h-3" /> {email}
-                              </button>
+                              email.startsWith("FORM:") ? (
+                                <a key={idx} href={email.replace("FORM:", "")} target="_blank" rel="noopener noreferrer" className="px-2 py-1 bg-blue-900/30 border border-blue-700/50 text-blue-300 text-xs rounded hover:bg-blue-800/40 transition-colors flex items-center gap-1">
+                                  <ExternalLink className="w-3 h-3" /> Contact Form
+                                </a>
+                              ) : (
+                                <button key={idx} type="button" onClick={() => setProspectEmail(email)} className="px-2 py-1 bg-emerald-900/30 border border-emerald-700/50 text-emerald-300 text-xs rounded hover:bg-emerald-800/40 transition-colors flex items-center gap-1">
+                                  <Mail className="w-3 h-3" /> {email}
+                                </button>
+                              )
                             ))}
                           </div>
                         </div>

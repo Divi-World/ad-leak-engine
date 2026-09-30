@@ -56,4 +56,20 @@ class MessageGenerator:
         if sig == "no_ab_variation":
             count = ev.get("active_ad_count")
             return f"you are running only {count} active ad(s) with no A/B variation" if count else "you have no A/B ad variation"
+        if sig == "missing_initiate_checkout":
+            return "your checkout is dropping Meta conversion signals"
+        if sig == "missing_add_to_cart":
+            return "your AddToCart events are not reaching Meta"
+        if sig == "no_retargeting":
+            return "you are not retargeting your site visitors"
+        if sig == "generic_hook":
+            return "your ad hooks are too generic to stop the scroll"
+        if sig == "no_video_creative":
+            return "you are missing video creatives in your ad mix"
+        if sig == "small_tap_targets":
+            return "your mobile tap targets are too small, causing mis-clicks"
+        if sig == "missing_cta":
+            return "your ads lack clear, action-oriented call-to-actions"
+        if sig == "slow_ttfb":
+            return "your server response time is killing your mobile conversions"
         return f"we detected a {sig.replace('_', ' ')} issue"
