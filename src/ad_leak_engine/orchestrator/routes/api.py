@@ -73,6 +73,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
             leaks = list(l1.scan(page))
             platform, conf, platform_evidence = "custom", 0.3, []
             html = None
+            discovered_emails = []
             # [SEED: 2399] Define before first use; no cross-iteration state leak
             is_invalid = landing and (not landing.startswith(("http://", "https://")) or "fbgeo" in landing)
             if landing and not is_invalid:
@@ -81,6 +82,10 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                     html = _fetch_html_resilient(landing)
                     if html:
                         platform, conf, platform_evidence = detector.detect(landing, html)
+                        # [SEED: 2399] Contact Discovery
+                        import re as _re_discover
+                        raw_emails = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
+                        discovered_emails = list(set([e for e in raw_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css'))]))[:5]
                         _write_status(job_id, {"status": "running", "progress": min(95, 58 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: platform fingerprinted as {platform}"})
 
                 except Exception:
@@ -137,7 +142,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "estimated_recovery": pack.estimated_recovery,
                 "teardown_path": f"output/{job_id}/{page_id}/teardown.md",
                 "evidence_mode": evidence_mode,
-                "platform_evidence": platform_evidence
+                "platform_evidence": platform_evidence,
+                "discovered_emails": discovered_emails
             })
             processed += 1
             

@@ -13,6 +13,7 @@ type ScanResult = {
   estimated_recovery: string;
   evidence_mode?: string;
   platform_evidence?: string[];
+  discovered_emails?: string[];
 };
 
 export default function Home() {
@@ -39,6 +40,24 @@ export default function Home() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [fontSize, setFontSize] = useState<'small' | 'base' | 'large'>('base');
 
+  const [countryOpen, setCountryOpen] = useState(false);
+  const COUNTRIES = [
+    { code: "US", name: "United States" }, { code: "CA", name: "Canada" }, { code: "GB", name: "United Kingdom" },
+    { code: "AU", name: "Australia" }, { code: "DE", name: "Germany" }, { code: "FR", name: "France" },
+    { code: "IT", name: "Italy" }, { code: "ES", name: "Spain" }, { code: "BR", name: "Brazil" },
+    { code: "MX", name: "Mexico" }, { code: "IN", name: "India" }, { code: "JP", name: "Japan" },
+    { code: "NL", name: "Netherlands" }, { code: "SE", name: "Sweden" }, { code: "NO", name: "Norway" },
+    { code: "DK", name: "Denmark" }, { code: "FI", name: "Finland" }, { code: "PL", name: "Poland" },
+    { code: "ZA", name: "South Africa" }, { code: "AE", name: "United Arab Emirates" }, { code: "SA", name: "Saudi Arabia" },
+    { code: "EG", name: "Egypt" }, { code: "IL", name: "Israel" }, { code: "TR", name: "Turkey" },
+    { code: "AR", name: "Argentina" }, { code: "CL", name: "Chile" }, { code: "CO", name: "Colombia" },
+    { code: "PE", name: "Peru" }, { code: "PH", name: "Philippines" }, { code: "ID", name: "Indonesia" },
+    { code: "TH", name: "Thailand" }, { code: "VN", name: "Vietnam" }, { code: "MY", name: "Malaysia" },
+    { code: "SG", name: "Singapore" }, { code: "NZ", name: "New Zealand" }, { code: "IE", name: "Ireland" },
+    { code: "PT", name: "Portugal" }, { code: "BE", name: "Belgium" }, { code: "CH", name: "Switzerland" },
+    { code: "AT", name: "Austria" }, { code: "GR", name: "Greece" }, { code: "CZ", name: "Czech Republic" },
+    { code: "HU", name: "Hungary" }, { code: "RO", name: "Romania" }
+  ];
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
   const loadJobs = async () => {
@@ -134,6 +153,11 @@ export default function Home() {
       return;
     }
     setExpandedId(res.page_id);
+    if (res.discovered_emails && res.discovered_emails.length > 0) {
+      setProspectEmail(res.discovered_emails[0]);
+    } else {
+      setProspectEmail("");
+    }
     setLoadingReport(true);
     setTeardown("");
     setMessageText("");
@@ -187,14 +211,38 @@ export default function Home() {
     }
   };
 
+  const CodeBlock = ({ children }: any) => {
+    const [copied, setCopied] = useState(false);
+    const handleCopy = () => {
+      navigator.clipboard.writeText(String(children).replace(/\n$/, ''));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+    return (
+      <div className="relative group my-3">
+        <pre className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 overflow-x-auto text-xs">
+          <code className="text-emerald-300">{children}</code>
+        </pre>
+        <button onClick={handleCopy} className="absolute top-2 right-2 px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+          {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+    );
+  };
+
   const mdComponents: any = {
-    h1: (p: any) => <h1 className="text-2xl font-bold text-white mt-6 mb-3" {...p} />,
-    h2: (p: any) => <h2 className="text-xl font-semibold text-white mt-6 mb-3 border-b border-zinc-800 pb-2" {...p} />,
-    h3: (p: any) => <h3 className="text-lg font-semibold text-blue-300 mt-5 mb-2" {...p} />,
-    p: (p: any) => <p className="text-sm text-zinc-300 leading-relaxed my-2" {...p} />,
-    li: (p: any) => <li className="text-sm text-zinc-300 ml-5 list-disc my-1" {...p} />,
+    h1: (p: any) => <h1 className="text-2xl font-bold text-zinc-900 dark:text-white mt-6 mb-3" {...p} />,
+    h2: (p: any) => <h2 className="text-xl font-semibold text-zinc-900 dark:text-white mt-6 mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2" {...p} />,
+    h3: (p: any) => <h3 className="text-lg font-semibold text-blue-700 dark:text-blue-300 mt-5 mb-2" {...p} />,
+    p: (p: any) => <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed my-2" {...p} />,
+    li: (p: any) => <li className="text-sm text-zinc-700 dark:text-zinc-300 ml-5 list-disc my-1" {...p} />,
     pre: (p: any) => <pre className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 overflow-x-auto my-3 text-xs" {...p} />,
-    code: (p: any) => <code className="text-emerald-300" {...p} />,
+    code: ({ children, className, ...props }: any) => {
+      const isBlock = className !== undefined || (typeof children === 'string' && children.includes('\n'));
+      if (isBlock) return <CodeBlock>{children}</CodeBlock>;
+      return <code className="text-emerald-600 dark:text-emerald-300 bg-zinc-100 dark:bg-zinc-800 px-1 rounded" {...props}>{children}</code>;
+    },
   };
 
   return (
@@ -230,12 +278,21 @@ export default function Home() {
             <label className="block text-sm font-medium text-zinc-400 mb-2">Target Niche / Keyword</label>
             <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="e.g., organic skincare" className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">Country</label>
-            <input list="ale-countries" type="text" value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} maxLength={2} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/50" placeholder="Type or select..." />
-            <datalist id="ale-countries">
-              <option value="US">United States</option><option value="CA">Canada</option><option value="GB">United Kingdom</option><option value="AU">Australia</option><option value="DE">Germany</option><option value="FR">France</option><option value="IT">Italy</option><option value="ES">Spain</option><option value="BR">Brazil</option><option value="MX">Mexico</option><option value="IN">India</option><option value="JP">Japan</option><option value="KR">South Korea</option><option value="NL">Netherlands</option><option value="SE">Sweden</option><option value="NO">Norway</option><option value="DK">Denmark</option><option value="FI">Finland</option><option value="PL">Poland</option><option value="ZA">South Africa</option><option value="NG">Nigeria</option><option value="AE">United Arab Emirates</option><option value="SA">Saudi Arabia</option><option value="EG">Egypt</option><option value="IL">Israel</option><option value="TR">Turkey</option><option value="UA">Ukraine</option><option value="AR">Argentina</option><option value="CL">Chile</option><option value="CO">Colombia</option><option value="PE">Peru</option><option value="PH">Philippines</option><option value="ID">Indonesia</option><option value="TH">Thailand</option><option value="VN">Vietnam</option><option value="MY">Malaysia</option><option value="SG">Singapore</option><option value="NZ">New Zealand</option><option value="IE">Ireland</option><option value="PT">Portugal</option><option value="BE">Belgium</option><option value="CH">Switzerland</option><option value="AT">Austria</option><option value="GR">Greece</option><option value="CZ">Czech Republic</option><option value="HU">Hungary</option><option value="RO">Romania</option>
-            </datalist>
+          <div className="relative">
+            <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Country</label>
+            <input type="text" value={country} onChange={(e) => { setCountry(e.target.value.toUpperCase()); setCountryOpen(true); }} onFocus={() => setCountryOpen(true)} onBlur={() => setTimeout(() => setCountryOpen(false), 200)} maxLength={2} className="w-full bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/50" placeholder="Type or select..." />
+            {countryOpen && (
+              <div className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                {COUNTRIES.filter(c => c.code.includes(country) || c.name.toLowerCase().includes(country.toLowerCase())).map(c => (
+                  <button key={c.code} type="button" onMouseDown={(e) => { e.preventDefault(); setCountry(c.code); setCountryOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-zinc-900 dark:text-zinc-100 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
+                    <span className="font-semibold">{c.code}</span> <span className="text-zinc-500 dark:text-zinc-400">- {c.name}</span>
+                  </button>
+                ))}
+                {COUNTRIES.filter(c => c.code.includes(country) || c.name.toLowerCase().includes(country.toLowerCase())).length === 0 && (
+                  <div className="px-4 py-2 text-sm text-zinc-500">No matching countries</div>
+                )}
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-2">Limit</label>

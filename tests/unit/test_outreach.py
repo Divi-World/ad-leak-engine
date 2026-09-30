@@ -49,7 +49,7 @@ def test_bundle_creates_files(builder, sample_page, sample_leaks, sample_fixes):
 def test_message_contains_compliance_footer(builder, sample_page, sample_leaks, sample_fixes):
     pack = builder.build(sample_page, sample_leaks, sample_fixes)
     assert "UNSUBSCRIBE" in pack.message_text
-    assert "[Physical Address]" in pack.message_text
+    assert "adleakengine.com" in pack.message_text
 
 
 def test_teardown_contains_leaks(builder, sample_page, sample_leaks, sample_fixes):
