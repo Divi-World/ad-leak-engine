@@ -37,11 +37,33 @@ def _fetch_html_stealth(url: str) -> str | None:
     hb = HumanBrowser(headless=True)
     try:
         with hb.session() as page:
-            page.goto(url, wait_until="domcontentloaded", timeout=25000)
+            # [SEED: 2399] Increased timeout to 45s for heavy Shopify themes
+            page.goto(url, wait_until="domcontentloaded", timeout=45000)
             hb.human_pause(1.5, 3.0)
             return page.content()
     except Exception as e:
-        logger.error(f"Stealth fetch failed: {e}", extra={"stage": "ingest", "action": "fetch_html"})
+        logger.warning(f"Stealth fetch timeout/fail: {e}. Trying early-commit...", extra={"stage": "ingest", "action": "fetch_html"})
+        # [SEED: 2399] Fallback: Grab HTML as soon as network commits
+        try:
+            with hb.session() as page:
+                page.goto(url, wait_until="commit", timeout=15000)
+                return page.content()
+        except Exception:
+            pass
+        
+        # [SEED: 2399] Final Fallback: High-stealth HTTPX
+        try:
+            import httpx
+            resp = httpx.get(url, timeout=20.0, follow_redirects=True, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none"
+            })
+            if resp.status_code == 200: return resp.text
+        except Exception: pass
         return None
 
 def _fetch_html_resilient(url: str) -> str | None:
