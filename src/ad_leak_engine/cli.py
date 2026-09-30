@@ -66,6 +66,23 @@ def _fetch_html_resilient(url: str) -> str | None:
             return resp.text
     except Exception as e:
         logger.error(f"Plain HTTP fetch failed: {e}", extra={"stage": "ingest", "action": "fetch_html_http"})
+    
+    # [SEED: 2399] WAYBACK MACHINE FALLBACK (Defeats enterprise bot protection)
+    try:
+        from urllib.parse import urlparse
+        domain = urlparse(url).netloc
+        wb_resp = httpx.get(f"http://archive.org/wayback/available?url={domain}", timeout=10.0)
+        if wb_resp.status_code == 200:
+            wb_data = wb_resp.json()
+            if "archived_snapshots" in wb_data and "closest" in wb_data["archived_snapshots"]:
+                wb_url = wb_data["archived_snapshots"]["closest"].get("url")
+                if wb_url:
+                    wb_html_resp = httpx.get(wb_url, timeout=15.0, follow_redirects=True)
+                    if wb_html_resp.status_code == 200 and wb_html_resp.text:
+                        logger.info(f"Wayback fetch succeeded for {url}", extra={"stage": "ingest", "action": "fetch_html_wayback"})
+                        return wb_html_resp.text
+    except Exception as e:
+        logger.error(f"Wayback fetch failed: {e}", extra={"stage": "ingest", "action": "fetch_html_wayback"})
     return None
 
 def cmd_scan(keyword: str, country: str, limit: int, skip_crawl: bool):

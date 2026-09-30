@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { Search, Loader2, ShieldCheck, Zap, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Copy, Mail, Check, Settings, Sun, Moon, Key, ShieldAlert } from "lucide-react";
+import { Search, Loader2, ShieldCheck, Zap, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Copy, Mail, Check, Settings, Sun, Moon, Key } from "lucide-react";
 
 type ScanResult = {
   page_id: string;
@@ -14,7 +14,6 @@ type ScanResult = {
   evidence_mode?: string;
   platform_evidence?: string[];
   discovered_emails?: string[];
-  audit_status?: string;
 };
 
 export default function Home() {
@@ -42,12 +41,22 @@ export default function Home() {
   const [fontSize, setFontSize] = useState<'small' | 'base' | 'large'>('base');
 
   const [countryOpen, setCountryOpen] = useState(false);
-  const COUNTRY_REGIONS = [
-    { region: "North America", countries: [{ code: "US", name: "United States" }, { code: "CA", name: "Canada" }, { code: "MX", name: "Mexico" }] },
-    { region: "Europe", countries: [{ code: "GB", name: "United Kingdom" }, { code: "DE", name: "Germany" }, { code: "FR", name: "France" }, { code: "IT", name: "Italy" }, { code: "ES", name: "Spain" }, { code: "NL", name: "Netherlands" }, { code: "SE", name: "Sweden" }, { code: "NO", name: "Norway" }, { code: "DK", name: "Denmark" }, { code: "FI", name: "Finland" }, { code: "PL", name: "Poland" }, { code: "IE", name: "Ireland" }, { code: "PT", name: "Portugal" }, { code: "BE", name: "Belgium" }, { code: "CH", name: "Switzerland" }, { code: "AT", name: "Austria" }, { code: "GR", name: "Greece" }, { code: "CZ", name: "Czech Republic" }, { code: "HU", name: "Hungary" }, { code: "RO", name: "Romania" }] },
-    { region: "APAC", countries: [{ code: "AU", name: "Australia" }, { code: "IN", name: "India" }, { code: "JP", name: "Japan" }, { code: "PH", name: "Philippines" }, { code: "ID", name: "Indonesia" }, { code: "TH", name: "Thailand" }, { code: "VN", name: "Vietnam" }, { code: "MY", name: "Malaysia" }, { code: "SG", name: "Singapore" }, { code: "NZ", name: "New Zealand" }] },
-    { region: "LATAM", countries: [{ code: "BR", name: "Brazil" }, { code: "AR", name: "Argentina" }, { code: "CL", name: "Chile" }, { code: "CO", name: "Colombia" }, { code: "PE", name: "Peru" }] },
-    { region: "MEA", countries: [{ code: "ZA", name: "South Africa" }, { code: "AE", name: "United Arab Emirates" }, { code: "SA", name: "Saudi Arabia" }, { code: "EG", name: "Egypt" }, { code: "IL", name: "Israel" }, { code: "TR", name: "Turkey" }] }
+  const COUNTRIES = [
+    { code: "US", name: "United States" }, { code: "CA", name: "Canada" }, { code: "GB", name: "United Kingdom" },
+    { code: "AU", name: "Australia" }, { code: "DE", name: "Germany" }, { code: "FR", name: "France" },
+    { code: "IT", name: "Italy" }, { code: "ES", name: "Spain" }, { code: "BR", name: "Brazil" },
+    { code: "MX", name: "Mexico" }, { code: "IN", name: "India" }, { code: "JP", name: "Japan" },
+    { code: "NL", name: "Netherlands" }, { code: "SE", name: "Sweden" }, { code: "NO", name: "Norway" },
+    { code: "DK", name: "Denmark" }, { code: "FI", name: "Finland" }, { code: "PL", name: "Poland" },
+    { code: "ZA", name: "South Africa" }, { code: "AE", name: "United Arab Emirates" }, { code: "SA", name: "Saudi Arabia" },
+    { code: "EG", name: "Egypt" }, { code: "IL", name: "Israel" }, { code: "TR", name: "Turkey" },
+    { code: "AR", name: "Argentina" }, { code: "CL", name: "Chile" }, { code: "CO", name: "Colombia" },
+    { code: "PE", name: "Peru" }, { code: "PH", name: "Philippines" }, { code: "ID", name: "Indonesia" },
+    { code: "TH", name: "Thailand" }, { code: "VN", name: "Vietnam" }, { code: "MY", name: "Malaysia" },
+    { code: "SG", name: "Singapore" }, { code: "NZ", name: "New Zealand" }, { code: "IE", name: "Ireland" },
+    { code: "PT", name: "Portugal" }, { code: "BE", name: "Belgium" }, { code: "CH", name: "Switzerland" },
+    { code: "AT", name: "Austria" }, { code: "GR", name: "Greece" }, { code: "CZ", name: "Czech Republic" },
+    { code: "HU", name: "Hungary" }, { code: "RO", name: "Romania" }
   ];
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -269,23 +278,16 @@ export default function Home() {
             <label className="block text-sm font-medium text-zinc-400 mb-2">Target Niche / Keyword</label>
             <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="e.g., organic skincare" className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
           </div>
-          <div className="relative" onMouseEnter={() => setCountryOpen(true)} onMouseLeave={() => setCountryOpen(false)}>
+          <div className="relative group" onMouseEnter={() => setCountryOpen(true)} onMouseLeave={() => setCountryOpen(false)}>
             <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Country</label>
-            <input type="text" value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} maxLength={2} className="w-full bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/50" placeholder="Type code (e.g. US)..." />
+            <input type="text" value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} onFocus={() => setCountryOpen(true)} maxLength={2} className="w-full bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/50" placeholder="Type or hover to select..." />
             {countryOpen && (
-              <div className="absolute z-50 left-0 mt-1 w-[600px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-2xl p-6 grid grid-cols-3 gap-6">
-                {COUNTRY_REGIONS.map(region => (
-                  <div key={region.region}>
-                    <h4 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2">{region.region}</h4>
-                    <div className="space-y-1">
-                      {region.countries.filter(c => c.code.includes(country) || c.name.toLowerCase().includes(country.toLowerCase())).map(c => (
-                        <button key={c.code} type="button" onClick={() => { setCountry(c.code); setCountryOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors flex justify-between items-center group">
-                          <span>{c.name}</span>
-                          <span className="text-xs font-mono text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-blue-400">{c.code}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              <div className="absolute z-50 left-0 mt-1 w-[500px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-2xl p-4 grid grid-cols-2 gap-2 max-h-80 overflow-y-auto">
+                {COUNTRIES.filter(c => c.code.includes(country) || c.name.toLowerCase().includes(country.toLowerCase())).map(c => (
+                  <button key={c.code} type="button" onClick={() => { setCountry(c.code); setCountryOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors flex justify-between items-center group">
+                    <span>{c.name}</span>
+                    <span className="text-xs font-mono text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-blue-400">{c.code}</span>
+                  </button>
                 ))}
               </div>
             )}
@@ -334,17 +336,10 @@ export default function Home() {
                     <p className="text-2xl font-bold text-green-400">{res.estimated_recovery}</p>
                   </div>
                 </div>
-                {res.audit_status === "blocked" ? (
-                  <div className="flex items-center gap-2 text-sm text-orange-300 bg-orange-900/20 p-3 rounded-lg border border-orange-800/50">
-                    <ShieldAlert className="w-4 h-4 text-orange-500" />
-                    <span><strong className="text-orange-200">Audit Blocked:</strong> Enterprise bot protection prevented deep L2/L3 telemetry capture.</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-950 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                    <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                    <span>Detected <strong className="text-zinc-900 dark:text-white">{res.leak_count}</strong> critical revenue leaks.</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-950 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                  <span>Detected <strong className="text-zinc-900 dark:text-white">{res.leak_count}</strong> critical revenue leaks.</span>
+                </div>
               </button>
 
               {expandedId === res.page_id && (
