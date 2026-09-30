@@ -369,6 +369,18 @@ export default function Home() {
                     </div>
                     <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
                       <h5 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2"><Mail className="w-4 h-4" /> Dispatch Outreach</h5>
+                      {res.discovered_emails && res.discovered_emails.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-1.5">Verified Contacts (Click to use):</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {res.discovered_emails.map((email, idx) => (
+                              <button key={idx} type="button" onClick={() => setProspectEmail(email)} className="px-2 py-1 bg-emerald-900/30 border border-emerald-700/50 text-emerald-300 text-xs rounded hover:bg-emerald-800/40 transition-colors flex items-center gap-1">
+                                <Mail className="w-3 h-3" /> {email}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <input type="email" value={prospectEmail} onChange={(e) => setProspectEmail(e.target.value)} placeholder="prospect@company.com" className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                       <button onClick={() => sendEmail(res)} disabled={!/\S+@\S+\.\S+/.test(prospectEmail) || sendState === "sending"} className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-sm font-semibold rounded-lg transition-all">
                         {sendState === "sending" ? "Sending..." : "Send Outreach Email"}

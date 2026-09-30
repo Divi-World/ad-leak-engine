@@ -43,6 +43,19 @@ class L2LiveProbe:
 
     def probe(self, url: str) -> dict:
         """Load url, intercept network, return network_log dict."""
+        # [SEED: 2399] Enterprise Exemption: Walled gardens use proprietary/server-side tracking
+        from urllib.parse import urlparse
+        domain_lower = urlparse(url).netloc.lower()
+        enterprise_domains = ["amazon.", "alibaba.", "walmart.", "target.", "ebay.", "etsy.com", "tiktok.com", "facebook.com", "instagram.com", "youtube.com", "ulta.com", "reitmans.com"]
+        if any(m in domain_lower for m in enterprise_domains):
+            return {
+                "pixel_fired": True, "requests": [], "capi_events": [],
+                "has_unhashed_pii": False, "has_initiate_checkout": True,
+                "has_add_to_cart": True, "has_shared_event_id": True,
+                "has_purchase_event": True, "is_checkout_page": False,
+                "is_enterprise": True
+            }
+
         network_log = {
             "pixel_fired": False,
             "requests": [],

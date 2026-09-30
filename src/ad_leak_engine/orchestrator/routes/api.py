@@ -228,8 +228,12 @@ def list_jobs() -> dict:
 def get_scan_status(job_id: str) -> dict:
     status_file = Path(f"output/{job_id}/status.json")
     if status_file.exists():
-        with open(status_file, "r") as f:
-            return json.load(f)
+        try:
+            with open(status_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            # [SEED: 2399] Fallback for race condition while file is being written
+            return {"status": "running", "progress": 0, "stage": "Processing scan data..."}
     return {"status": "not_found"}
 
 @router.get("/report/{job_id}/{page_id}")
