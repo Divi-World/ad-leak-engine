@@ -64,6 +64,18 @@ class OutreachBuilder(AbstractOutreachBuilder):
         )
 
     def _generate_teardown(self, page: Page, leaks: list[Leak], fixes: list[Fix], estimated_recovery: str) -> str:
+        # [SEED: 2399] EVIDENCE SANITIZATION (Strip raw logs for C-Level readability)
+        for leak in leaks:
+            if hasattr(leak, 'evidence') and isinstance(leak.evidence, dict) and 'network_requests' in leak.evidence:
+                reqs = leak.evidence['network_requests']
+                if isinstance(reqs, list):
+                    pixel_detected = any('facebook' in r.get('url','') or 'fbq' in r.get('url','') or 'fbevents' in r.get('url','') for r in reqs if isinstance(r, dict))
+                    waf_detected = any('cloudflare' in r.get('url','') or 'challenge' in r.get('url','') for r in reqs if isinstance(r, dict))
+                    summary = f"Analyzed {len(reqs)} network requests. "
+                    if waf_detected: summary += "WAF/Bot Protection detected. "
+                    summary += f"Meta Pixel: {'Detected' if pixel_detected else 'MISSING'}."
+                    leak.evidence['network_requests'] = summary
+        
         template = self.env.get_template("teardown.md.j2")
         return template.render(page=page, leaks=leaks, fixes=fixes, estimated_recovery=estimated_recovery)
 

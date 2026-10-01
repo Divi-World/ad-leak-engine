@@ -75,6 +75,9 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
 
             # Check against broad enterprise keywords (no TLD required)
             walled_gardens = ["amazon", "alibaba", "walmart", "target.", "ebay.", "etsy.com", "tiktok", "facebook.com", "instagram.com", "youtube.com", "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", "homedepot.com", "lowes.com", "olive young", "neutrogena", "reitmans"]
+            # [SEED: 2399] HARD SKIP: Null URLs & Walled Gardens (Enterprise Junk)
+            if not landing or any(wg in landing.lower() for wg in walled_gardens):
+                continue
             is_walled_garden = any(wg in (landing or "").lower() or wg in page_name.lower() for wg in walled_gardens)
             if is_walled_garden:
                 _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
@@ -92,8 +95,17 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
             is_invalid = landing and (not landing.startswith(("http://", "https://")) or "fbgeo" in landing)
             if landing and not is_invalid:
                 try:
-                    from ...cli import _fetch_html_resilient
-                    html = _fetch_html_resilient(landing)
+                    # [SEED: 2399] INDUSTRIAL WAF BYPASS (curl_cffi TLS Impersonation)
+                    html = None
+                    try:
+                        from curl_cffi import requests as cffi_requests
+                        cffi_resp = cffi_requests.get(landing, impersonate="chrome120", timeout=15)
+                        if cffi_resp.status_code == 200 and "challenges.cloudflare.com" not in cffi_resp.text[:2000] and "<title>Just a moment..." not in cffi_resp.text[:2000]:
+                            html = cffi_resp.text
+                    except Exception: pass
+                    if not html:
+                        from ...cli import _fetch_html_resilient
+                        html = _fetch_html_resilient(landing)
                     if html:
                         # [SEED: 2399] Enterprise/Retailer Recognition (Defeats Custom 30% fallback)
                         from urllib.parse import urlparse
@@ -324,6 +336,35 @@ def get_scan_status(job_id: str) -> dict:
             # [SEED: 2399] Fallback for race condition while file is being written
             return {"status": "running", "progress": 0, "stage": "Processing scan data..."}
     return {"status": "not_found"}
+
+@router.get("/report/{job_id}/{page_id}/pdf")
+async def get_report_pdf(job_id: str, page_id: str):
+    """[SEED: 2399] True Server-Side PDF Generation via Playwright."""
+    import re as _re_pdf
+    import io
+    from pathlib import Path
+    from fastapi.responses import StreamingResponse
+    from playwright.async_api import async_playwright
+    import markdown as _md_pdf
+
+    if not _re_pdf.fullmatch(r"[0-9a-zA-Z\-]+", job_id) or not _re_pdf.fullmatch(r"[0-9a-zA-Z\-]+", page_id):
+        return {"status": "error", "detail": "Invalid identifiers."}
+    
+    md_path = Path(f"output/{job_id}/{page_id}/teardown.md")
+    if not md_path.exists(): return {"status": "error", "detail": "Report not found."}
+    
+    html_body = _md_pdf.markdown(md_path.read_text(encoding="utf-8"), extensions=["tables", "fenced_code"])
+    css = "body{font-family:sans-serif;max-width:800px;margin:0 auto;padding:40px;color:#111}pre{background:#0f172a;color:#e2e8f0;padding:14px;border-radius:8px;overflow-x:auto}h1,h2,h3{color:#0f172a}"
+    full_html = f"<!DOCTYPE html><html><head><style>{css}</style></head><body>{html_body}</body></html>"
+    
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
+        await page.set_content(full_html)
+        pdf_bytes = await page.pdf(format="A4", print_background=True)
+        await browser.close()
+        
+    return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={page_id}_audit.pdf"})
 
 @router.get("/report/{job_id}/{page_id}")
 def get_report(job_id: str, page_id: str) -> dict:

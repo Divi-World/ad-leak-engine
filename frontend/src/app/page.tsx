@@ -364,6 +364,7 @@ export default function Home() {
                     </div>
                     <pre className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-xs text-zinc-300 whitespace-pre-wrap max-h-64 overflow-y-auto">{messageText}</pre>
                     <div className="flex gap-2">
+                      <button onClick={async () => { window.open(`${apiUrl}/report/${jobId}/${res.page_id}/pdf`, '_blank'); }} className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-bold text-white transition-all shadow-lg">Download Executive PDF</button>
                       <button onClick={() => { const blob = new Blob([teardown], { type: "text/markdown" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "teardown.md"; a.click(); URL.revokeObjectURL(url); }} className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-medium text-white transition-all">Download Teardown (.md)</button>
                       <button onClick={() => { const blob = new Blob([messageText], { type: "text/plain" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "message.txt"; a.click(); URL.revokeObjectURL(url); }} className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-medium text-white transition-all">Download Message (.txt)</button>
                     </div>
