@@ -15,18 +15,15 @@ app = FastAPI(
     description=f"Top 1 Global Ad Infrastructure Audit Engine [SEED: {SEED_NUMBER}]",
 )
 
-# Top 1 Global CORS Configuration for Frontend Integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Local Next.js dev
-        "https://adleakengine.com",  # Production Frontend
-        "https://www.adleakengine.com",
-    ],
+    allow_origins=["*"],  # Permissive for DevTunnels & Localhost
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Explicitly allows OPTIONS preflight
+    allow_headers=["*"],  # Explicitly allows X-API-Key and Content-Type
 )
+
+# Top 1 Global CORS Configuration for Frontend Integration
 
 app.include_router(scan.router)
 app.include_router(leads.router)

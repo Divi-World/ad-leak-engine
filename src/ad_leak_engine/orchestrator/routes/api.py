@@ -23,6 +23,22 @@ from ...shared.logging import get_logger
 router = APIRouter()
 logger = get_logger()
 
+
+# ============================================================
+# [SEED: 2399] SEMANTIC EXCLUSION MAP (Prevents Niche Bleed)
+# Blocks businesses that use beauty/skincare keywords but are actually photography/camera studios.
+# ============================================================
+EXCLUSION_KEYWORDS = [
+    "photography", "photo studio", "photographer", "portrait", "wedding", 
+    "camera", "photoshop", "filmmaker", "videography", "boudoir", "maternity shoot",
+    "photo booth", "headshots", "lens", "shutter"
+]
+
+def is_semantic_excluded(text: str) -> bool:
+    if not text: return False
+    text_lower = text.lower()
+    return any(keyword in text_lower for keyword in EXCLUSION_KEYWORDS)
+
 def _write_status(job_id: str, payload: dict):
     with open(f"output/{job_id}/status.json", "w", encoding="utf-8") as _f:
         json.dump(payload, _f)
