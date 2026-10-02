@@ -74,7 +74,17 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 continue
 
             # Check against broad enterprise keywords (no TLD required)
-            walled_gardens = ["amazon", "alibaba", "walmart", "target.", "ebay.", "etsy.com", "tiktok", "facebook.com", "instagram.com", "youtube.com", "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", "homedepot.com", "lowes.com", "olive young", "neutrogena", "reitmans"]
+            walled_gardens = [
+                "amazon", "alibaba", "walmart", "target.", "ebay.", "etsy.com", "tiktok", "facebook.com", "instagram.com", "youtube.com", 
+                "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", "homedepot.com", "lowes.com", "olive young", "neutrogena", "reitmans",
+                "nike.com", "adidas.com", "puma.com", "underarmour.com", "lululemon.com", "apple.com", "samsung.com", "microsoft.com", "bestbuy.com", "costco.com",
+                "mcdonalds.com", "starbucks.com", "subway.com", "burgerking.com", "wendys.com", "chick-fil-a.com", "tacobell.com", "kfc.com", "dominos.com",
+                "loreal.com", "esteelauder.com", "clinique.com", "maybelline.com", "covergirl.com", "revlon.com", "glossier.com", "drunkelephant.com", "fentybeauty.com",
+                "shein.com", "temu.com", "aliexpress.com", "asos.com", "zara.com", "h&m.com", "uniqlo.com", "gap.com", "oldnavy.com", "victoriassecret.com",
+                "kohls.com", "jcpenney.com", "ikea.com", "staples.com", "officedepot.com", "chewy.com", "petsmart.com", "petco.com", "autozone.com", "cvs.com",
+                "walgreens.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "citibank.com", "capitalone.com", "verizon.com", "att.com", "t-mobile.com",
+                "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com", "geico.com", "progressive.com", "allstate.com", "libertymutual.com"
+            ]
             # [SEED: 2399] HARD SKIP: Null URLs & Walled Gardens (Enterprise Junk)
             if not landing or any(wg in landing.lower() for wg in walled_gardens):
                 continue
@@ -338,14 +348,15 @@ def get_scan_status(job_id: str) -> dict:
     return {"status": "not_found"}
 
 @router.get("/report/{job_id}/{page_id}/pdf")
+@router.get("/report/{job_id}/{page_id}/pdf")
 async def get_report_pdf(job_id: str, page_id: str):
-    """[SEED: 2399] True Server-Side PDF Generation via Playwright."""
+    """[SEED: 2399] Bulletproof Server-Side PDF (Bypasses Windows Async Crash)."""
     import re as _re_pdf
     import io
+    import asyncio
+    import concurrent.futures
     from pathlib import Path
     from fastapi.responses import StreamingResponse
-    from playwright.async_api import async_playwright
-    import markdown as _md_pdf
 
     if not _re_pdf.fullmatch(r"[0-9a-zA-Z\-]+", job_id) or not _re_pdf.fullmatch(r"[0-9a-zA-Z\-]+", page_id):
         return {"status": "error", "detail": "Invalid identifiers."}
@@ -353,18 +364,27 @@ async def get_report_pdf(job_id: str, page_id: str):
     md_path = Path(f"output/{job_id}/{page_id}/teardown.md")
     if not md_path.exists(): return {"status": "error", "detail": "Report not found."}
     
-    html_body = _md_pdf.markdown(md_path.read_text(encoding="utf-8"), extensions=["tables", "fenced_code"])
-    css = "body{font-family:sans-serif;max-width:800px;margin:0 auto;padding:40px;color:#111}pre{background:#0f172a;color:#e2e8f0;padding:14px;border-radius:8px;overflow-x:auto}h1,h2,h3{color:#0f172a}"
-    full_html = f"<!DOCTYPE html><html><head><style>{css}</style></head><body>{html_body}</body></html>"
-    
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page()
-        await page.set_content(full_html)
-        pdf_bytes = await page.pdf(format="A4", print_background=True)
-        await browser.close()
+    def _generate_pdf_sync(md_path_str: str) -> bytes:
+        from playwright.sync_api import sync_playwright
+        import markdown as _md_pdf
+        html_body = _md_pdf.markdown(Path(md_path_str).read_text(encoding="utf-8"), extensions=["tables", "fenced_code"])
+        css = "body{font-family:sans-serif;max-width:800px;margin:0 auto;padding:40px;color:#111}pre{background:#0f172a;color:#e2e8f0;padding:14px;border-radius:8px;overflow-x:auto}h1,h2,h3{color:#0f172a}"
+        full_html = f"<!DOCTYPE html><html><head><style>{css}</style></head><body>{html_body}</body></html>"
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.set_content(full_html)
+            pdf_bytes = page.pdf(format="A4", print_background=True)
+            browser.close()
+        return pdf_bytes
+
+    # Bypass Windows ProactorEventLoop Playwright Crash via ThreadPool
+    loop = asyncio.get_running_loop()
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        pdf_bytes = await loop.run_in_executor(pool, _generate_pdf_sync, str(md_path))
         
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={page_id}_audit.pdf"})
+
 
 @router.get("/report/{job_id}/{page_id}")
 def get_report(job_id: str, page_id: str) -> dict:
