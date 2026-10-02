@@ -25,19 +25,42 @@ logger = get_logger()
 
 
 # ============================================================
-# [SEED: 2399] SEMANTIC EXCLUSION MAP (Prevents Niche Bleed)
-# Blocks businesses that use beauty/skincare keywords but are actually photography/camera studios.
-# ============================================================
-EXCLUSION_KEYWORDS = [
-    "photography", "photo studio", "photographer", "portrait", "wedding", 
-    "camera", "photoshop", "filmmaker", "videography", "boudoir", "maternity shoot",
-    "photo booth", "headshots", "lens", "shutter"
-]
 
-def is_semantic_excluded(text: str) -> bool:
+
+# ============================================================
+# [SEED: 2399] DYNAMIC NICHE ONTOLOGY ENGINE (Enterprise Grade)
+# Replaces hardcoded keywords with real-time DOM/OG context analysis.
+# ============================================================
+NICHE_TAXONOMY = {
+    "ecommerce_skincare": ["photography", "camera", "boudoir", "salon", "makeup artist"],
+    "real_estate": ["property photography", "architectural render", "mls listing", "zillow scraper"],
+    "saas_b2b": ["freelance developer", "agency", "consultant", "directory"],
+    "local_service": ["directory", "lead generation", "franchise", "call center"],
+    "default": ["photography", "agency", "directory", "freelancer", "reseller"]
+}
+
+def resolve_dynamic_exclusions(html: str) -> list:
+    try:
+        import re as _re_ont
+        og_desc = _re_ont.search(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']', html, _re_ont.IGNORECASE)
+        keywords = _re_ont.search(r'<meta[^>]+name=["\']keywords["\'][^>]+content=["\']([^"\']+)["\']', html, _re_ont.IGNORECASE)
+        text_sig = f"{og_desc.group(1) if og_desc else ''} {keywords.group(1) if keywords else ''}".lower()
+        
+        if any(w in text_sig for w in ['skin', 'beauty', 'serum', 'tallow', 'cosmetic', 'nubian']):
+            return NICHE_TAXONOMY["ecommerce_skincare"]
+        elif any(w in text_sig for w in ['home', 'realty', 'property', 'mls', 'mortgage']):
+            return NICHE_TAXONOMY["real_estate"]
+        elif any(w in text_sig for w in ['saas', 'software', 'api', 'b2b', 'platform']):
+            return NICHE_TAXONOMY["saas_b2b"]
+        return NICHE_TAXONOMY["default"]
+    except Exception:
+        return NICHE_TAXONOMY["default"]
+
+def is_semantic_excluded(text: str, html_context: str = "") -> bool:
     if not text: return False
+    exclusions = resolve_dynamic_exclusions(html_context)
     text_lower = text.lower()
-    return any(keyword in text_lower for keyword in EXCLUSION_KEYWORDS)
+    return any(keyword in text_lower for keyword in exclusions)
 
 def _write_status(job_id: str, payload: dict):
     with open(f"output/{job_id}/status.json", "w", encoding="utf-8") as _f:
