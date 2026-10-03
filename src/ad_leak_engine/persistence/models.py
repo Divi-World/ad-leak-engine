@@ -17,3 +17,10 @@ class AdRecord(SQLModel, table=True):
     country: str
     raw_json: str
     collected_at: datetime = Field(default_factory=_utcnow)
+
+
+class Tenant(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    meta_access_token: str | None = None
+    meta_ad_account_id: str | None = None
+    created_at: datetime = Field(default_factory=_utcnow)

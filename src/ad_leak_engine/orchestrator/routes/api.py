@@ -119,7 +119,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "nike.com", "adidas.com", "puma.com", "underarmour.com", "lululemon.com", "apple.com", "samsung.com", "microsoft.com", "bestbuy.com", "costco.com",
                 "mcdonalds.com", "starbucks.com", "subway.com", "burgerking.com", "wendys.com", "chick-fil-a.com", "tacobell.com", "kfc.com", "dominos.com",
                 "loreal.com", "esteelauder.com", "clinique.com", "maybelline.com", "covergirl.com", "revlon.com", "glossier.com", "drunkelephant.com", "fentybeauty.com",
-                "shein.com", "temu.com", "aliexpress.com", "asos.com", "zara.com", "h&m.com", "uniqlo.com", "gap.com", "oldnavy.com", "victoriassecret.com",
+                "shein.", "temu.", "aliexpress.", "asos.", "zara.", "h&m.com", "uniqlo.", "gap.", "oldnavy.", "victoriassecret.",
                 "kohls.com", "jcpenney.com", "ikea.com", "staples.com", "officedepot.com", "chewy.com", "petsmart.com", "petco.com", "autozone.com", "cvs.com",
                 "walgreens.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "citibank.com", "capitalone.com", "verizon.com", "att.com", "t-mobile.com",
                 "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com", "geico.com", "progressive.com", "allstate.com", "libertymutual.com",
@@ -168,7 +168,9 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                         # [SEED: 2399] Unstoppable Contact Discovery (Live -> Deep -> Wayback)
                         import re as _re_discover
                         raw_emails = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
-                        discovered_emails = list(set([e for e in raw_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]))[:5]
+                        raw_cleaned = [e for e in raw_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]
+                        poison = ["window", "call", "apply", "src", "data", "length", "anim", "native", "function", "gst", "mzst", "vtls", "liquid"]
+                        discovered_emails = list(set([e for e in raw_cleaned if not any(p in e.lower() for p in poison)]))[:5]
                         
                         if not discovered_emails:
                             contact_paths = ["/contact", "/about", "/imprint", "/contact-us", "/pages/contact-us", "/policies/privacy-policy", "/pages/contact"]
@@ -390,7 +392,6 @@ def get_scan_status(job_id: str) -> dict:
             return {"status": "running", "progress": 0, "stage": "Processing scan data..."}
     return {"status": "not_found"}
 
-@router.get("/report/{job_id}/{page_id}/pdf")
 @router.get("/report/{job_id}/{page_id}/pdf")
 async def get_report_pdf(job_id: str, page_id: str):
     """[SEED: 2399] Bulletproof Server-Side PDF (Bypasses Windows Async Crash)."""
