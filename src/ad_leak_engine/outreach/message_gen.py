@@ -44,6 +44,8 @@ class MessageGenerator:
         if sig == "slow_ttfb":
             ttfb = ev.get("ttfb_ms")
             return f"your server takes {ttfb}ms to respond" if ttfb else "your server response is slow"
+        if sig == "telemetry_blind_spot":
+            return "automated deep-scan was blocked by bot protection"
         if sig == "pixel_not_firing":
             return "your Meta Pixel is not firing on the landing page"
         if sig == "unhashed_pii":

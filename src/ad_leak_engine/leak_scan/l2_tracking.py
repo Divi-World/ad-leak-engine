@@ -7,6 +7,14 @@ class L2TrackingScanner(AbstractLeakScanner):
         return "L2"
 
     def scan(self, page: Page) -> list[Leak]:
+        # [SEED: 2399] WAF/TIMEOUT INVALIDATION GATE
+        if getattr(page, "raw", None) and page.raw.get("fetch_blocked"):
+            return [Leak(
+                page_id=page.id, tier="L2", signal="telemetry_blind_spot", severity=0.60,
+                recommendation="Automated deep-scan blocked by bot protection or timed out. Server-side CAPI recommended.",
+                evidence={"network_requests": "Blocked or timed out"}
+            )]
+        
         leaks = []
         # In production, Playwright intercepts network requests and injects this into page.raw
         net_log = page.raw.get("network_log", {}) if page.raw else {}

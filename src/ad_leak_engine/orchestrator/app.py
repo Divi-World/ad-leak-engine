@@ -1,5 +1,5 @@
-"""FastAPI orchestrator for Ad-Leak-Engine [SEED: 2399]."""
 from __future__ import annotations
+"""FastAPI orchestrator for Ad-Leak-Engine [SEED: 2399]."""
 
 from datetime import datetime, timezone
 
@@ -29,7 +29,7 @@ app.include_router(scan.router)
 app.include_router(leads.router)
 app.include_router(feedback.router)
 app.include_router(api.router, prefix="/api/v1", tags=["Frontend API"])
-app.include_router(oauth.router, prefix="/api/v1/auth", tags=["OAuth"])
+app.include_router(oauth.router, prefix="/api/v1", tags=["OAuth"])
 
 
 @app.get("/health")

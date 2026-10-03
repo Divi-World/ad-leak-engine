@@ -122,7 +122,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "shein.com", "temu.com", "aliexpress.com", "asos.com", "zara.com", "h&m.com", "uniqlo.com", "gap.com", "oldnavy.com", "victoriassecret.com",
                 "kohls.com", "jcpenney.com", "ikea.com", "staples.com", "officedepot.com", "chewy.com", "petsmart.com", "petco.com", "autozone.com", "cvs.com",
                 "walgreens.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "citibank.com", "capitalone.com", "verizon.com", "att.com", "t-mobile.com",
-                "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com", "geico.com", "progressive.com", "allstate.com", "libertymutual.com"
+                "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com", "geico.com", "progressive.com", "allstate.com", "libertymutual.com",
+                "shopee", "lazada", "mercadolibre", "rakuten", "allegro", "ozon"
             ]
             # [SEED: 2399] HARD SKIP: Null URLs & Walled Gardens (Enterprise Junk)
             if not landing or any(wg in landing.lower() for wg in walled_gardens):
@@ -295,6 +296,9 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 try:
                     from ...leak_scan.telemetry_collector import TelemetryCollector
                     page.raw = TelemetryCollector().collect(landing)
+                    # [SEED: 2399] WAF/TIMEOUT CONTEXT INJECTION
+                    if not html or any(waf in html for waf in ["challenges.cloudflare.com", "<title>Just a moment...", "cdn-cgi/challenge-platform", "DataDome", "Imperva"]):
+                        page.raw["fetch_blocked"] = True
                     if html:
                         page.raw["html"] = html
                     with open(snapshot_path, "w", encoding="utf-8") as sf:
@@ -309,7 +313,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
             fixes = []
             for leak in leaks:
                 try:
-                    fixes.append(forge.generate(leak, platform, conf))
+                    fixes.append(forge.generate(leak, 'custom' if getattr(leak, 'tier', '') == 'L1' else platform, 0.30 if getattr(leak, 'tier', '') == 'L1' else conf))
                 except PlatformAmbiguousError:
                     fixes.append(forge.generate(leak, "custom", conf))
                 except Exception:

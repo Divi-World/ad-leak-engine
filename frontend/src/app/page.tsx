@@ -255,7 +255,7 @@ export default function Home() {
           <h1 className="text-3xl font-bold tracking-tight text-white">Ad-Leak-Engine</h1>
           <span className="px-2 py-0.5 text-xs font-medium bg-zinc-800 text-zinc-400 rounded-full border border-zinc-700">SEED: 2399</span>
           <div className="ml-auto flex gap-2">
-            <button onClick={() => window.open(`${apiUrl.replace('/api/v1','')}/api/v1/auth/meta/login`, '_blank', 'width=600,height=700')} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all" title="Connect Meta for deep spend analysis">
+            <button onClick={() => window.open(`${apiUrl.replace('/api/v1','')}/api/v1/oauth/meta/login`, '_blank', 'width=600,height=700')} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all" title="Connect Meta for deep spend analysis">
               <Key className="w-3.5 h-3.5" /> Give Full Access
             </button>
             <button onClick={() => setSettingsOpen(true)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-all" title="Preferences">
