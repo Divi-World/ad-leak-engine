@@ -32,3 +32,11 @@ class AdRepository:
     def count_ads(self) -> int:
         with Session(engine) as session:
             return len(session.query(AdRecord).all())
+
+
+class TenantRepository:
+    def get_tenant_token(self, tenant_id: str = "seed_2399") -> str | None:
+        """Fetch the stored Meta Graph API token for Financial Ingestion."""
+        with Session(engine) as session:
+            tenant = session.get(Tenant, tenant_id)
+            return tenant.meta_access_token if tenant else None

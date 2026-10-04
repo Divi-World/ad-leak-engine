@@ -169,7 +169,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                         import re as _re_discover
                         raw_emails = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
                         raw_cleaned = [e for e in raw_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]
-                        poison = ["window", "call", "apply", "src", "data", "length", "anim", "native", "function", "gst", "mzst", "vtls", "liquid"]
+                        poison = ["window", "call", "apply", "src", "data", "length", "anim", "native", "function", "gst", "mzst", "vtls", "liquid", "sentry", "zipify", "bugsnag", "rollbar", "newrelic", "datadome"]
                         discovered_emails = list(set([e for e in raw_cleaned if not any(p in e.lower() for p in poison)]))[:5]
                         
                         if not discovered_emails:

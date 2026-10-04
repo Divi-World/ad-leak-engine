@@ -1,0 +1,13 @@
+Here is exactly what we must implement before Phase 41 (Deployment) and Phase 43 (Billing) to make the system practically irresistible to buyers:
+1. Hard Financial Data Ingestion (The $100k Multiplier)
+Current State: The system estimates recovery heuristically ($2,800/month potential recovery).
+The Upgrade: Wire the persisted Meta OAuth token to query the Meta Ads Insights API (GET /v18.0/act_{ad_account_id}/insights?fields=spend,cpa,roas).
+The Impact: The teardown shifts to: "Based on your actual $14,200 monthly spend and $45 CPA, fixing this pixel will recover $4,100/month." This transitions the system from a heuristic scanner to a financial audit engine.
+2. Competitor Ad Library Benchmarking (The $150k Multiplier)
+Current State: The system only audits the prospect's own ads.
+The Upgrade: Implement a CompetitorIntelligence module that queries the Meta Ad Library API for the top 3 competitors in the "skincare" niche and compares their active video ad count and creative hooks against the prospect.
+The Impact: The teardown will say: "Your top 3 competitors are running 45 active video ads with UGC hooks, while you are running 0. You are losing market share." This creates extreme FOMO and urgency for the prospect.
+3. Continuous Pixel Health Monitoring (The $200k Multiplier)
+Current State: The system performs one-off audits.
+The Upgrade: Implement a cron-based PixelHealthMonitor that pings the prospect's landing page daily. If the Meta Pixel drops or the CAPI webhook fails, it instantly fires a Slack/Email alert to the agency.
+The Impact: Transitions the system from a "lead generation tool" to a "mission-critical infrastructure monitor" that agencies will pay $999/mo to retain.
