@@ -62,6 +62,20 @@ async def meta_callback(request: Request, code: str = None, state: str = None):
         raise HTTPException(status_code=400, detail=f"[SEED: 2399] Meta OAuth Rejected: {error_msg}")
         
     # [SEED: 2399] FORENSIC GATE: Token acquired. In production, this is encrypted and stored in the Tenant DB.
+    # [SEED: 2399] INDUSTRIAL TOKEN PERSISTENCE
+    from ...persistence.db import engine
+    from ...persistence.models import Tenant
+    from sqlmodel import Session
+    token = data.get('access_token')
+    with Session(engine) as session:
+        tenant = session.get(Tenant, 'seed_2399')
+        if not tenant:
+            tenant = Tenant(id='seed_2399', meta_access_token=token)
+            session.add(tenant)
+        else:
+            tenant.meta_access_token = token
+        session.commit()
+
     return JSONResponse(content={
         "status": "success", 
         "message": "[SEED: 2399] Meta Real-ID Proof Connected. Hard Financial Ingestion Cleared.",
