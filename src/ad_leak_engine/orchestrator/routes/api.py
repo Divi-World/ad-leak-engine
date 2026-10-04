@@ -331,6 +331,17 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
             if financial_data:
                 page.raw = page.raw or {}
                 page.raw["financial_data"] = financial_data
+
+            # [SEED: 2399] COMPETITOR INTELLIGENCE (Free Meta Ad Library API)
+            competitor_data = None
+            try:
+                from ...intelligence.competitor import get_competitor_benchmark
+                competitor_data = get_competitor_benchmark(page_id, niche=keyword, country=country)
+            except Exception:
+                pass
+            if competitor_data:
+                page.raw = page.raw or {}
+                page.raw["competitor_data"] = competitor_data
             pack = builder.build(page, leaks, fixes, financial_data=financial_data)
             _write_status(job_id, {"status": "running", "progress": min(95, 75 + int(20 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: forging {platform} fixes & teardown"})
 
