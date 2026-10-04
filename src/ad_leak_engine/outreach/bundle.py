@@ -26,14 +26,14 @@ class OutreachBuilder(AbstractOutreachBuilder):
             lstrip_blocks=True,
         )
 
-    def build(self, page: Page, leaks: list[Leak], fixes: list[Fix]) -> OutreachPack:
+    def build(self, page: Page, leaks: list[Leak], fixes: list[Fix], financial_data: dict | None = None) -> OutreachPack:
         """Assemble teardown, message, and evidence into an OutreachPack."""
         # Rank leaks by severity (highest first)
         leaks = sorted(leaks, key=lambda l: l.severity, reverse=True)
 
         # Calculate recovery BEFORE generating teardown so it can be passed in
         estimated_recovery = self._estimate_recovery(page, leaks)
-        teardown_md = self._generate_teardown(page, leaks, fixes, estimated_recovery)
+        teardown_md = self._generate_teardown(page, leaks, fixes, estimated_recovery, financial_data=financial_data)
         exec_summary = self.message_gen.generate_executive_summary(page, leaks)
         message_text = self.message_gen.generate_message(page, leaks, fixes)
 
@@ -63,7 +63,7 @@ class OutreachBuilder(AbstractOutreachBuilder):
             estimated_recovery=estimated_recovery,
         )
 
-    def _generate_teardown(self, page: Page, leaks: list[Leak], fixes: list[Fix], estimated_recovery: str) -> str:
+    def _generate_teardown(self, page: Page, leaks: list[Leak], fixes: list[Fix], estimated_recovery: str, financial_data: dict | None = None) -> str:
         # [SEED: 2399] EVIDENCE SANITIZATION (Strip raw logs for C-Level readability)
         for leak in leaks:
             if hasattr(leak, 'evidence') and isinstance(leak.evidence, dict) and 'network_requests' in leak.evidence:
@@ -79,7 +79,17 @@ class OutreachBuilder(AbstractOutreachBuilder):
         template = self.env.get_template("teardown.md.j2")
         return template.render(page=page, leaks=leaks, fixes=fixes, estimated_recovery=estimated_recovery)
 
-    def _estimate_recovery(self, page: Page, leaks: list[Leak]) -> str:
+    def _estimate_recovery(self, page: Page, leaks: list[Leak], financial_data: dict | None = None) -> str:
+        # [SEED: 2399] HARD FINANCIAL DATA (Graph API Insights)
+        if financial_data and financial_data.get("actual_spend"):
+            spend = financial_data["actual_spend"]
+            roas = financial_data.get("actual_roas", 0)
+            cpa = financial_data.get("actual_cpa")
+            # Conservative recovery: 15-25% efficiency gain (industry standard)
+            recovery_low = round(spend * 0.15, 0)
+            recovery_high = round(spend * 0.25, 0)
+            return f"${recovery_low:,.0f}-${recovery_high:,.0f}/mo recovery (based on actual ${spend:,.0f} spend, {roas}x ROAS)"
+        # Fallback: enhanced heuristic estimation
         # 1. HOLY GRAIL: If OAuth granted actual spend, use it for lethal precision
         if page.actual_monthly_spend and page.actual_monthly_spend > 0:
             high_sev_count = sum(1 for l in leaks if l.severity >= 0.8)

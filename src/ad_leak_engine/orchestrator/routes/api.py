@@ -321,7 +321,17 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 except Exception:
                     pass
                     
-            pack = builder.build(page, leaks, fixes)
+            # [SEED: 2399] GRAPH API FINANCIAL INGESTION (Hard Data > Heuristics)
+            financial_data = None
+            try:
+                from ...ingest.graph_financial import get_financial_data_for_page
+                financial_data = get_financial_data_for_page(page_id)
+            except Exception:
+                pass
+            if financial_data:
+                page.raw = page.raw or {}
+                page.raw["financial_data"] = financial_data
+            pack = builder.build(page, leaks, fixes, financial_data=financial_data)
             _write_status(job_id, {"status": "running", "progress": min(95, 75 + int(20 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: forging {platform} fixes & teardown"})
 
             results.append({
@@ -331,6 +341,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "confidence": conf,
                 "leak_count": len(leaks),
                 "estimated_recovery": pack.estimated_recovery,
+                    "financial_source": "meta_graph_api" if financial_data else "heuristic",
                 "teardown_path": f"output/{job_id}/{page_id}/teardown.md",
                 "evidence_mode": evidence_mode,
                 "platform_evidence": platform_evidence,
