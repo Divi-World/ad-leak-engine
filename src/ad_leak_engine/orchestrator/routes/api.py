@@ -169,7 +169,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                         import re as _re_discover
                         raw_emails = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
                         raw_cleaned = [e for e in raw_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]
-                        poison = ["window", "call", "apply", "src", "data", "length", "anim", "native", "function", "gst", "mzst", "vtls", "liquid", "sentry", "zipify", "bugsnag", "rollbar", "newrelic", "datadome"]
+                        poison = ["window", "call", "apply", "src", "data", "length", "anim", "native", "function", "gst", "mzst", "vtls", "liquid", "sentry", "zipify", "bugsnag", "rollbar", "newrelic", "datadome", "example.com", "example.org", "example.net", "test.com", "localhost", "stripe.com", "paypal.com", "shopify.com", "wix.com", "wordpress.com", "squarespace.com", "notifications@", "noreply@", "no-reply@", "donotreply@", "trustandsafety@", "sellersupport@", "community@", "support@", "info@", "contact@", "help@", "admin@"]
                         discovered_emails = list(set([e for e in raw_cleaned if not any(p in e.lower() for p in poison)]))[:5]
                         
                         if not discovered_emails:
@@ -356,7 +356,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "teardown_path": f"output/{job_id}/{page_id}/teardown.md",
                 "evidence_mode": evidence_mode,
                 "platform_evidence": platform_evidence,
-                "discovered_emails": discovered_emails
+                "discovered_emails": discovered_emails,
+                "competitor_benchmark": competitor_data is not None
             })
             processed += 1
             
