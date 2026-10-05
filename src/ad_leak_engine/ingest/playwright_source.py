@@ -30,7 +30,9 @@ class PlaywrightSource(AbstractAdSource):
             "education": ["tutoring", "online course", "coaching", "bootcamp", "language learning", "test prep", "certification", "edtech", "homeschool"],
             "finance": ["accounting", "bookkeeping", "tax prep", "financial advisor", "wealth management", "insurance", "loans", "credit repair", "forex"],
             "pet": ["dog grooming", "vet", "pet sitting", "dog walking", "pet food", "pet supplies", "kennel", "cattery", "animal rescue", "pet trainer"],
-            "beauty": ["salon", "spa", "nail salon", "hair extensions", "lashes", "microblading", "botox", "fillers", "medspa", "tanning"]
+            "beauty": ["salon", "spa", "nail salon", "hair extensions", "lashes", "microblading", "botox", "fillers", "medspa", "tanning"],
+            "personal care": ["skincare", "beauty", "cosmetics", "hair care", "body care", "oral care", "wellness", "organic", "natural", "bath", "grooming", "hygiene", "moisturizer", "shampoo", "soap", "lotion", "cream", "serum", "facial", "cleanser"],
+            "personal": ["skincare", "beauty", "cosmetics", "hair care", "body care", "oral care", "wellness", "organic", "natural", "bath", "grooming", "hygiene", "moisturizer", "shampoo", "soap", "lotion", "cream", "serum", "facial", "cleanser"]
         }
         
         queries_to_run = [query]
