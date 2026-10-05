@@ -39,6 +39,14 @@ class PlaywrightSource(AbstractAdSource):
         q_lower = query.lower().strip()
         if q_lower in EXPANSION_MAP:
             queries_to_run.extend(EXPANSION_MAP[q_lower])
+        else:
+            # [SEED: 2399] UNIVERSAL TRANSACTIONAL FALLBACK
+            # For arbitrary niches (e.g., "woodworking", "real estate", "studio"), append commercial modifiers
+            # to guarantee the Meta Ad Library returns DTC/Service leads, not blogs or apps.
+            queries_to_run.extend([
+                f"{query} store", f"{query} shop", f"{query} services", 
+                f"{query} buy", f"{query} agency"
+            ])
             
         seen_ids = set()
         total_yielded = 0

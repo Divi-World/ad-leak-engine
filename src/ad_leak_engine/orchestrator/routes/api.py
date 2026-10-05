@@ -128,7 +128,9 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "kohls.com", "jcpenney.com", "ikea.com", "staples.com", "officedepot.com", "chewy.com", "petsmart.com", "petco.com", "autozone.com", "cvs.com",
                 "walgreens.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "citibank.com", "capitalone.com", "verizon.com", "att.com", "t-mobile.com",
                 "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com", "geico.com", "progressive.com", "allstate.com", "libertymutual.com",
-                "shopee", "lazada", "mercadolibre", "rakuten", "allegro", "ozon"
+                "shopee", "lazada", "mercadolibre", "rakuten", "allegro", "ozon",
+                "play.google.com", "apps.apple.com", "itunes.apple.com", "microsoft.com/store",
+                "steampowered.com", "epicgames.com", "roblox.com", "appstore", "google.com/store"
             ]
             # [SEED: 2399] HARD SKIP: Null URLs & Walled Gardens (Enterprise Junk)
             if not landing or any(wg in landing.lower() for wg in walled_gardens):
@@ -138,39 +140,45 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
                 continue
 
-            # [SEED: 2399] AD-COPY RELEVANCE GATE (Dynamic Intent Filter)
-            # Filters out pages where ad text doesn't match the niche intent
-            # Uses RawAd.body and RawAd.title attributes verified in Phase 42.92
-            _niche_signals = {
-                "personal care": ["skin", "beauty", "hair", "wellness", "organic", "natural", "care", "treatment", "therapy", "bath", "body", "oral", "hygiene", "grooming", "moisturizer", "shampoo", "soap", "lotion", "cream", "serum", "facial", "cleanser", "cosmetic", "makeup", "spa", "salon", "dermatology", "aesthetics"],
-                "personal": ["skin", "beauty", "hair", "wellness", "organic", "natural", "care", "treatment", "therapy", "bath", "body", "oral", "hygiene", "grooming", "moisturizer", "shampoo", "soap", "lotion", "cream", "serum", "facial", "cleanser", "cosmetic", "makeup", "spa", "salon", "dermatology", "aesthetics"],
-                "skincare": ["skin", "beauty", "dermatology", "anti-aging", "serum", "moisturizer", "glow", "facial", "cleanser", "acne", "wrinkle", "collagen"],
-                "health": ["wellness", "supplement", "fitness", "nutrition", "medical", "holistic", "vitamin", "protein", "keto", "health", "organic"],
-                "fitness": ["gym", "workout", "training", "weight loss", "crossfit", "yoga", "pilates", "fitness", "exercise", "muscle", "strength"],
-                "marketing": ["seo", "agency", "digital marketing", "consulting", "b2b", "lead generation", "ppc", "branding", "marketing", "growth", "funnel"],
-                "ecommerce": ["shop", "store", "buy", "discount", "sale", "shipping", "cart", "checkout", "boutique", "retail", "fashion", "apparel", "clothing", "shoes", "accessories", "jewelry", "dropshipping"],
-                "fashion": ["apparel", "clothing", "boutique", "streetwear", "accessories", "jewelry", "sneakers", "footwear", "fashion", "dress", "style", "wear", "trend"],
-                "tech": ["saas", "software", "startup", "ai", "cloud", "cybersecurity", "fintech", "tech", "platform", "app", "code", "developer"],
-                "real estate": ["realtor", "mortgage", "property", "homes", "rentals", "airbnb", "real estate", "listing", "agent", "broker"],
-                "food": ["restaurant", "cafe", "bakery", "catering", "meal prep", "food delivery", "snacks", "beverage", "brewery", "food", "recipe", "taste"],
-                "home": ["interior design", "landscaping", "plumbing", "hvac", "roofing", "contractor", "remodeling", "decor", "furniture", "home", "garden", "diy"],
-                "auto": ["car dealership", "auto repair", "detailing", "tires", "motorcycle", "rv", "boat", "marine", "auto", "vehicle", "mechanic"],
-                "education": ["tutoring", "online course", "coaching", "bootcamp", "language learning", "test prep", "certification", "edtech", "education", "learn", "student"],
-                "finance": ["accounting", "bookkeeping", "tax", "financial advisor", "wealth management", "insurance", "loans", "credit", "finance", "invest", "trading"],
-                "pet": ["dog grooming", "vet", "pet sitting", "dog walking", "pet food", "pet supplies", "kennel", "pet", "animal", "puppy", "cat"],
-                "beauty": ["salon", "spa", "nail", "hair extensions", "lashes", "microblading", "botox", "fillers", "medspa", "tanning", "beauty", "makeup"]
+            # [SEED: 2399] MASTER UNIVERSAL SEMANTIC GUARD (Industrial Grade)
+            # 1. Dynamic Signal Extraction (DRY: Imports EXPANSION_MAP directly)
+            # [SEED: 2399] SAFE LOCALIZED EXPANSION MAP (Fixes ImportError)
+            # Hardcoded locally to prevent cross-module import failures.
+            _EXPANSION_MAP = {
+                "skincare": ["skin", "beauty", "dermatology", "serum", "moisturizer", "facial", "cleanser", "cosmetic"],
+                "health": ["wellness", "supplement", "fitness", "nutrition", "medical", "holistic", "vitamin", "organic"],
+                "fitness": ["gym", "workout", "training", "weight loss", "crossfit", "yoga", "pilates", "exercise"],
+                "marketing": ["seo", "agency", "digital marketing", "consulting", "b2b", "lead generation", "ppc", "branding"],
+                "ecommerce": ["shop", "store", "buy", "boutique", "retail", "fashion", "apparel", "dropshipping"],
+                "real estate": ["realty", "property", "mls", "mortgage", "homes", "realtor", "housing"],
+                "woodworking": ["carpentry", "timber", "lumber", "craftsman", "custom furniture", "woodcraft"],
+                "studio": ["photography", "portrait", "creative", "design", "agency"]
             }
-            _k = keyword.lower().strip()
-            _signals = _niche_signals.get(_k, [_k, "shop", "buy", "offer", "discount", "sale"])
+            _k_words = [w for w in keyword.lower().split() if len(w) > 2]
+            _signals = list(_k_words)
+            _k_clean = keyword.lower().strip()
+            if _k_clean in _EXPANSION_MAP:
+                _signals.extend(_EXPANSION_MAP[_k_clean])
             
-            # Aggregate ad body text + title + page name
-            _ad_corpus = " ".join([str(ad.body or ""), str(ad.title or ""), page_name]).lower()
+            # 2. Digital/App Entity Rejection (Kills "Studio Camera App" anomalies)
+            _digital_negatives = ["app", "apk", "download", "play store", "mod", "hack", "cheat", "free download", "install now", "camera app"]
+            _neg_in_keyword = any(neg in _k_clean for neg in _digital_negatives)
             
-            # Check relevance
-            _is_relevant = any(sig in _ad_corpus for sig in _signals)
+            _ad_corpus = f"{page_name} {landing or ''}".lower()
+            for ad in page_ads:
+                _ad_corpus += f" {ad.body or ''} {ad.title or ''}"
             
-            if not _is_relevant:
-                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Ad copy not relevant to '{keyword}')"})
+            if not _neg_in_keyword and any(neg in _ad_corpus for neg in _digital_negatives):
+                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Digital/App Entity)"})
+                continue
+
+            # 3. Smart Overlap (Semantic Match OR E-commerce/Service Intent)
+            _intent_markers = ["shop", "store", "buy", "cart", "checkout", "shipping", "boutique", "services", "agency", "clinic", "studio"]
+            _ecom_intent = any(w in _ad_corpus for w in _intent_markers)
+            _semantic_overlap = any(sig in _ad_corpus for sig in _signals)
+            
+            if not _semantic_overlap and not _ecom_intent:
+                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Zero semantic overlap with '{keyword}')"})
                 continue
 
             page = Page(id=page_id, name=page_name, url=landing, ads=page_ads, first_seen=datetime.now(timezone.utc))
