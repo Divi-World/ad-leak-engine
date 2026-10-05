@@ -133,6 +133,41 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
                 continue
 
+            # [SEED: 2399] AD-COPY RELEVANCE GATE (Dynamic Intent Filter)
+            # Filters out pages where ad text doesn't match the niche intent
+            # Uses RawAd.body and RawAd.title attributes verified in Phase 42.92
+            _niche_signals = {
+                "personal care": ["skin", "beauty", "hair", "wellness", "organic", "natural", "care", "treatment", "therapy", "bath", "body", "oral", "hygiene", "grooming", "moisturizer", "shampoo", "soap", "lotion", "cream", "serum", "facial", "cleanser", "cosmetic", "makeup", "spa", "salon", "dermatology", "aesthetics"],
+                "personal": ["skin", "beauty", "hair", "wellness", "organic", "natural", "care", "treatment", "therapy", "bath", "body", "oral", "hygiene", "grooming", "moisturizer", "shampoo", "soap", "lotion", "cream", "serum", "facial", "cleanser", "cosmetic", "makeup", "spa", "salon", "dermatology", "aesthetics"],
+                "skincare": ["skin", "beauty", "dermatology", "anti-aging", "serum", "moisturizer", "glow", "facial", "cleanser", "acne", "wrinkle", "collagen"],
+                "health": ["wellness", "supplement", "fitness", "nutrition", "medical", "holistic", "vitamin", "protein", "keto", "health", "organic"],
+                "fitness": ["gym", "workout", "training", "weight loss", "crossfit", "yoga", "pilates", "fitness", "exercise", "muscle", "strength"],
+                "marketing": ["seo", "agency", "digital marketing", "consulting", "b2b", "lead generation", "ppc", "branding", "marketing", "growth", "funnel"],
+                "ecommerce": ["shop", "store", "buy", "discount", "sale", "shipping", "cart", "checkout", "boutique", "retail", "fashion", "apparel", "clothing", "shoes", "accessories", "jewelry", "dropshipping"],
+                "fashion": ["apparel", "clothing", "boutique", "streetwear", "accessories", "jewelry", "sneakers", "footwear", "fashion", "dress", "style", "wear", "trend"],
+                "tech": ["saas", "software", "startup", "ai", "cloud", "cybersecurity", "fintech", "tech", "platform", "app", "code", "developer"],
+                "real estate": ["realtor", "mortgage", "property", "homes", "rentals", "airbnb", "real estate", "listing", "agent", "broker"],
+                "food": ["restaurant", "cafe", "bakery", "catering", "meal prep", "food delivery", "snacks", "beverage", "brewery", "food", "recipe", "taste"],
+                "home": ["interior design", "landscaping", "plumbing", "hvac", "roofing", "contractor", "remodeling", "decor", "furniture", "home", "garden", "diy"],
+                "auto": ["car dealership", "auto repair", "detailing", "tires", "motorcycle", "rv", "boat", "marine", "auto", "vehicle", "mechanic"],
+                "education": ["tutoring", "online course", "coaching", "bootcamp", "language learning", "test prep", "certification", "edtech", "education", "learn", "student"],
+                "finance": ["accounting", "bookkeeping", "tax", "financial advisor", "wealth management", "insurance", "loans", "credit", "finance", "invest", "trading"],
+                "pet": ["dog grooming", "vet", "pet sitting", "dog walking", "pet food", "pet supplies", "kennel", "pet", "animal", "puppy", "cat"],
+                "beauty": ["salon", "spa", "nail", "hair extensions", "lashes", "microblading", "botox", "fillers", "medspa", "tanning", "beauty", "makeup"]
+            }
+            _k = keyword.lower().strip()
+            _signals = _niche_signals.get(_k, [_k, "shop", "buy", "offer", "discount", "sale"])
+            
+            # Aggregate ad body text + title + page name
+            _ad_corpus = " ".join([str(ad.body or ""), str(ad.title or ""), page_name]).lower()
+            
+            # Check relevance
+            _is_relevant = any(sig in _ad_corpus for sig in _signals)
+            
+            if not _is_relevant:
+                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Ad copy not relevant to '{keyword}')"})
+                continue
+
             page = Page(id=page_id, name=page_name, url=landing, ads=page_ads, first_seen=datetime.now(timezone.utc))
             _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name} ({processed + 1}/{limit}): L1 creative scan"})
 
