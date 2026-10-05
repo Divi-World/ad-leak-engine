@@ -78,7 +78,12 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
     source = PlaywrightSource(headless=True)
     
     try:
-        ads = list(source.search(keyword, country, max_results=50))
+        # [SEED: 2399] DYNAMIC RAW POOL SCALING (Guarantees Limit Fulfillment)
+        # The system ALREADY expands queries via EXPANSION_MAP in PlaywrightSource.
+        # To ensure we meet the user's limit after aggressive relevance filtering,
+        # we dynamically scale the raw ad pool size based on the requested limit.
+        _raw_pool_target = max(100, limit * 15)
+        ads = list(source.search(keyword, country, max_results=_raw_pool_target))
         if not ads:
             with open(f"output/{job_id}/status.json", "w") as f:
                 json.dump({"status": "error", "message": "No ads found"}, f)
