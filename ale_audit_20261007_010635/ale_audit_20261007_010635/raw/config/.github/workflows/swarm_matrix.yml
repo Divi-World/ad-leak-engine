@@ -1,0 +1,46 @@
+name: Swarm Matrix Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      keyword:
+        description: Keyword
+        required: true
+        default: shoes
+      country:
+        description: Country
+        required: true
+        default: US
+
+jobs:
+  swarm:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpangocairo-1.0-0 libgtk-3-0t64 libasound2t64 || \
+          sudo apt-get install -y -qq libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpangocairo-1.0-0 libgtk-3-0 libasound2
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[scrape]"
+      - name: Fetch camoufox
+        run: python -m camoufox fetch
+      - name: Scrape
+        run: python scripts/swarm_scrape.py --keyword "${{ inputs.keyword }}" --country "${{ inputs.country }}" --max-results 50
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swarm-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: output/swarm/
+          if-no-files-found: warn

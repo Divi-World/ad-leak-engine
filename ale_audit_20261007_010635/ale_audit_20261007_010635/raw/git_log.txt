@@ -1,0 +1,40 @@
+55a1cc3 2026-10-05 Divi-World feat(orchestrator): [SEED: 2399]  Dynamic Raw Pool Scaling & Ad-Copy Relevance Gate
+75680a6 2026-10-05 Divi-World feat(orchestrator): [SEED: 2399] Phase 42.95 Dynamic Raw Pool Scaling & Ad-Copy Relevance Gate
+33d5353 2026-10-05 Divi-World Filtered niche/keywords noise
+22c881c 2026-10-04 Divi-World Upgraded some functions for dict
+1d831f3 2026-10-04 Divi-World Updated some functions
+150e046 2026-10-04 Divi-World Updated some functions
+5018c43 2026-10-04 Divi-World [SEED: 2399] Phase 42.67: Graph API Financial Ingestor. Hard spend/CPA/ROAS data when OAuth authorized, heuristic fallback when not. Zero regressions.
+27ee79a 2026-10-04 Divi-World [SEED: 2399] Phase 42.66: Mathematical Verification. Proved Sentry filter, wired TenantRepository for Graph API, confirmed zero regressions.
+d57a0dc 2026-10-04 Divi-World [SEED: 2399] Phase 42.63: Final Verification. Secured OAuth Financial Truth Engine, purged evidence cache for live L2/WAF execution. System cleared for Phase 41 & 43.
+56f33a8 2026-10-03 Divi-World [SEED: 2399] Final Surgical Correction. Purged Contact Discovery Poison Pills, hardened Walled Garden TLDs, fixed OAuth persistence, and armed L2 Interceptor Blindness Gate.
+1a56d61 2026-10-02 Divi-World [SEED: 2399] Phase 42.52: Evidence-Based Rewiring. Expanded Walled Garden, injected WAF/Timeout Gate, enforced L1 Strategic Routing, and sanitized Message Gen.
+e5409d6 2026-10-02 Divi-World [SEED: 2399] Phase 42.34: Enterprise Ontology & Scopes. Dynamic Niche Resolver, TLS Fallback, and Meta Graph API Scopes injected.
+84f7dca 2026-10-02 Divi-World [SEED: 2399] Phase 42.33: Surgical Import Restoration. Resolved SyntaxError in api.py. Safely re-injected Semantic Exclusion Map.
+5f6cb13 2026-10-02 Divi-World [SEED: 2399] Phase 42.31: Surgical Correction & Top 1 Expansion. Fixed extract_ads silent crash. Expanded to 15 niches. Hardened Walled-Garden filter against ~80 enterprise brands.
+db5ecbf 2026-10-01 Divi-World [SEED: 2399] Phase 42.26: Forensic Surgery. Dynamic indentation mapping for curl_cffi WAF bypass. Hard skip for Null URLs and Walled Gardens. 116 tests passing.
+e3cf37b 2026-09-30 Divi-World [SEED: 2399] Phase 42.15: Top 1 Final Upgrade. Aggressive Walled-Garden filter, invalid protocol rejection, Contact Form fallback, commercial message polish, and UI external links. 116 tests passing.
+5f6a759 2026-09-30 Divi-World [SEED: 2399] Phase 42.14 Final: Injected Industrial-Grade JSON-LD Schema extraction for bulletproof, silent contact discovery. 116 tests passing.
+c6b0726 2026-09-30 Divi-World [SEED: 2399] Phase 42.12: Injected Walled-Garden Blocklist to skip non-SMB targets, upgraded Deep Contact Crawler to Playwright to bypass Cloudflare. 114 tests passing.
+ddbd544 2026-09-30 Divi-World [SEED: 2399] Phase 42.11: Patched JSON race condition, exempted Enterprise domains from L2 pixel checks, injected Verified Contacts UI into Dispatch. 114 tests passing.
+2dc0186 2026-09-29 Divi-World [SEED: 2399] Phase 42.10 Unstoppable: Removed artificial limits, restored flat premium country UI. 114 tests passing.
+d90cfbf 2026-09-29 Divi-World [SEED: 2399] Phase 42.9: Relevance Gate (drops mega-brands), Premium Hover Mega Menu. 114 tests passing.
+1aa52d2 2026-09-29 Divi-World [SEED: 2399] Phase 42 complete: OAuth (307 proven), premium dual-theme UI, country dropdown, contact discovery, code copy buttons, professional outreach with digital CAN-SPAM compliance. 114 tests passing.
+6d2f442 2026-09-29 Divi-World [SEED: 2399] Phase 42 complete: OAuth (307 redirect proven, 503 honest gating), premium light mode, persistent theme/font, unconditional settings, country datalist (50+), platform evidence transparency (matched markers), interface upgraded to 3-tuple with ALL callers+tests updated. 114 tests passing.
+a084b61 2026-09-29 Divi-World [SEED: 2399] Phases 39-40: Determinism finalized (ordering fix, snapshots, provenance, stabilized L3) + User Service Layer (history, downloads). 113 tests passing.
+bd373c2 2026-09-29 Divi-World [SEED: 2399] Phase 39: Determinism finalized. is_invalid ordering fixed, cross-iteration state leak removed, 24h evidence snapshots, provenance stamps, stabilized L3 measurement. 113 tests passing.
+ffe1820 2026-09-28 Divi-World Upgraded some functons
+12c5a84 2026-09-28 Divi-World [SEED: 2399] Phase 36: Truth heuristics hardened. Mixed-content false positive eliminated via exact-string anchored upgrade. 113 tests passing.
+8a16536 2026-09-28 Divi-World [SEED: 2399] Phases 31-35: UX precision, 3-layer self-healing fingerprint, live progress telemetry. Platform dictation restored in frontend (Shopify 95% proven). 113 tests passing.
+b6b2fe4 2026-09-27 Divi-World [SEED: 2399] Phase 29: Frontend dynamically wired to FastAPI backend. Next.js build verified. System adapted to local environment constraints.
+026b8ed 2026-09-27 Divi-World [SEED: 2399] Phase 28: Frontend API and Holy Grail OAuth routes established. CORS configured for adleakengine.com. 113 tests passing.
+08fb64b 2026-09-27 Divi-World [SEED: 2399] Phase 26: Holy Grail financial modeling integrated. Page schema upgraded to support OAuth-granted actual spend/CPA. 113 tests passing. Zero regressions.
+36ceee8 2026-09-27 Divi-World [SEED: 2399] Phase 24: Final backend polish. Message template refined for Top 1 professional outreach. Defensible revenue math fully integrated. System locked and ready for frontend transition.
+527afa8 2026-09-27 Divi-World [SEED: 2399] Phases 20-22: Invalid URL handling, signature optimization, and defensible revenue math integrated. System locked at Top 1 Global standard.
+ffa80a1 2026-09-26 Divi-World [SEED: 2399] Phase 19: Advanced Public Telemetry integrated.
+4d9d71e 2026-09-26 Divi-World [SEED: 2399] Phase 17+18: FastAPI routes wired, Fix Forge tier-routing upgraded. L1/L2/L3 routing verified. 113 tests passing.
+6a15ce2 2026-09-25 Divi-World Rewired some files
+1c68119 2026-09-25 Divi-World [SEED: 2399] Complete: All 10 phases verified. 113 tests passing. Swarm operational.
+37f541c 2026-09-25 Divi-World Updated some functions
+88e3e00 2026-09-25 Divi-World Fix: Correct setuptools build-backend in pyproject.toml
+f58cbfa 2026-09-25 Divi-World Fix: Add Ubuntu 24.04 t64 package fallback for GUI libs

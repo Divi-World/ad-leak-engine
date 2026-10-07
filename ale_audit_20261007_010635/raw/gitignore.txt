@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+
+# Data & Logs
+data/db/*.db
+data/debug/
+data/*.json
+logs/*.log
+output/*/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# Bootstrap scripts (Keep only scripts/ directory)
+*.sh
+!scripts/*.sh
+Implement fix effectiveness tracking (30-day re-scan)
+
+
+
+Remaining_RoadMap.md
+pyproject.toml
+setup_phase10_final_alignment.sh
+setup_restore.sh
+
+ROADMAP_PHASES_25_30.md
+SYSTEM_PRINCIPLES.md

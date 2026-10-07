@@ -117,6 +117,9 @@ def get_financial_data_for_page(page_id: str) -> dict | None:
         repo = TenantRepository()
         token = repo.get_tenant_token("seed_2399")
         if not token:
+            # SEED 2399: Fallback to environment variable for local CLI testing
+            token = os.getenv("META_ACCESS_TOKEN")
+            if not token:
             return None
         ingestor = GraphAPIFinancialIngestor(token)
         return ingestor.get_page_ad_spend(page_id)

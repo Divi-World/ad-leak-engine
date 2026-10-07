@@ -1,0 +1,16 @@
+Subject: Found 7 revenue leaks in Korean Skincare Reviews ads
+
+Hi Korean Skincare Reviews,
+
+I ran an automated audit of the live Meta ads and landing page for Korean Skincare Reviews. The headline: your Meta Pixel is not firing on the landing page, meaning you are likely flying blind on conversions.
+
+In total, I found 7 leaks in your tracking and landing-page setup. When this happens, Meta's algorithm optimizes against incomplete data—which inflates your CPA and suppresses your ROAS.
+
+I've prepared a brief, customized teardown report detailing the exact evidence and the copy-paste code fixes to recover this lost revenue. Would you be open to me sending it over?
+
+Best,
+Ad-Leak-Engine Team
+adleakengine.com
+
+---
+To opt-out of future audits, reply "UNSUBSCRIBE"

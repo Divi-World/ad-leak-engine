@@ -1,0 +1,6 @@
+frontend/src/app/page.tsx:61:  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+frontend/src/app/page.tsx:65:      const response = await fetch(`${apiUrl}/jobs`, { headers: { "X-API-Key": [REDACTED] || "dev_key_2399" } });
+frontend/src/app/page.tsx:110:          "X-API-Key": [REDACTED] || "dev_key_2399"
+frontend/src/app/page.tsx:127:        const response = await fetch(`${apiUrl}/scan/status/${jobId}`, { headers: { "X-API-Key": [REDACTED] || "dev_key_2399" } });
+frontend/src/app/page.tsx:165:      const response = await fetch(`${apiUrl}/report/${jobId}/${res.page_id}`, { headers: { "X-API-Key": [REDACTED] || "dev_key_2399" } });
+frontend/src/app/page.tsx:192:          "X-API-Key": [REDACTED] || "dev_key_2399"

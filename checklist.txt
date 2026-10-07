@@ -1,0 +1,9 @@
+Fully audit the system (Ad-Leak-Engine).
+Act as a high-tech senior engineer (brutal, hard truths, no gaslighting, no assumptions, no guesses).
+Outline everything the system currently has (based strictly on provided logs).
+Outline everything remaining to reach $80k–$200k market value.
+Outline step-by-step implementation to reach that real market value.
+Use live research to compare the system to top industrial systems.
+Confirm the recent audit reports (c4c6eed1... and 08e25c4e..., 13 pages, beauty niche).
+Confirm if teardown, message, and PDF contain real evidence or are hallucinated.
+Visit the dev tunnel link (https://vjqw5lpk-3000.uks1.devtunnels.ms/) to confirm reports.

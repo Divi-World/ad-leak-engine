@@ -1,0 +1,7 @@
+src\ad_leak_engine\ingest\html_parser.py:5: unused import 'Any' (90% confidence)
+src\ad_leak_engine\ingest\session_handshake.py:8: unused variable 'target_url' (100% confidence)
+src\ad_leak_engine\leak_scan\l2_probe.py:6: unused import 'Any' (90% confidence)
+src\ad_leak_engine\leak_scan\l3_site\crawler.py:2: unused import 'async_playwright' (90% confidence)
+src\ad_leak_engine\leak_scan\l3_site\crawler.py:5: unused variable 'start_url' (100% confidence)
+src\ad_leak_engine\self_heal\proxy_manager.py:9: unused import 'field' (90% confidence)
+src\ad_leak_engine\shared\schemas.py:41: unused variable 'cls' (100% confidence)

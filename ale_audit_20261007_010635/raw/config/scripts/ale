@@ -1,0 +1,10 @@
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+if [ -z "$VIRTUAL_ENV" ]; then
+    if [ -f "$ROOT_DIR/.venv/Scripts/activate" ]; then source "$ROOT_DIR/.venv/Scripts/activate"
+    elif [ -f "$ROOT_DIR/.venv/bin/activate" ]; then source "$ROOT_DIR/.venv/bin/activate"
+    fi
+fi
+cd "$ROOT_DIR"
+python -m ad_leak_engine.cli "$@"

@@ -1,0 +1,151 @@
+{
+ "source": "C:/Users/USER/Documents/Projects/Ad-Leak-Engine/ale_audit_20261007_010635/raw/report_08e25c4e.json",
+ "top_level_keys": [
+  "status",
+  "results"
+ ],
+ "schema": {
+  "$": {
+   "dict": 1
+  },
+  "status": {
+   "str": 1
+  },
+  "results": {
+   "list": 1
+  },
+  "results[]": {
+   "dict": 13
+  },
+  "results[].page_id": {
+   "str": 13
+  },
+  "results[].page_name": {
+   "str": 13
+  },
+  "results[].platform": {
+   "str": 13
+  },
+  "results[].confidence": {
+   "float": 13
+  },
+  "results[].leak_count": {
+   "int": 13
+  },
+  "results[].estimated_recovery": {
+   "str": 13
+  },
+  "results[].financial_source": {
+   "str": 13
+  },
+  "results[].teardown_path": {
+   "str": 13
+  },
+  "results[].evidence_mode": {
+   "str": 13
+  },
+  "results[].platform_evidence": {
+   "list": 13
+  },
+  "results[].platform_evidence[]": {
+   "str": 50
+  },
+  "results[].discovered_emails": {
+   "list": 13
+  },
+  "results[].discovered_emails[]": {
+   "str": 15
+  },
+  "results[].competitor_benchmark": {
+   "bool": 13
+  }
+ },
+ "urls": [],
+ "sites": [],
+ "ad_ids": [],
+ "leaks": [],
+ "evidence_coverage": {
+  "with_evidence": 0,
+  "total_leaks": 0
+ },
+ "claims": [
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$1,800",
+   "context": "$1,800/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$3,100",
+   "context": "$3,100/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$2,800",
+   "context": "$2,800/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$2,800",
+   "context": "$2,800/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$3,100",
+   "context": "$3,100/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$3,500",
+   "context": "$3,500/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$2,800",
+   "context": "$2,800/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$3,100",
+   "context": "$3,100/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$2,800",
+   "context": "$2,800/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$3,800",
+   "context": "$3,800/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$1,500",
+   "context": "$1,500/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$2,500",
+   "context": "$2,500/month potential recovery"
+  },
+  {
+   "path": "results[].estimated_recovery",
+   "kind": "money",
+   "value": "$3,100",
+   "context": "$3,100/month potential recovery"
+  }
+ ]
+}

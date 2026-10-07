@@ -1,0 +1,19 @@
+## .env
+SEED_NUMBER=<redacted>
+ENVIRONMENT=<redacted>
+DB_PATH=<redacted>
+CACHE_DIR=<redacted>
+LOG_DIR=<redacted>
+OUTPUT_DIR=<redacted>
+LOG_LEVEL=<redacted>
+## .env.example
+RESEND_API_KEY=[REDACTED]
+FROM_EMAIL=<redacted>
+META_CLIENT_ID=<redacted>
+META_CLIENT_SECRET=[REDACTED]
+## frontend/.env.local
+NEXT_PUBLIC_API_URL=<redacted>
+NEXT_PUBLIC_API_KEY=[REDACTED]
+## frontend/.env.local
+NEXT_PUBLIC_API_URL=<redacted>
+NEXT_PUBLIC_API_KEY=[REDACTED]

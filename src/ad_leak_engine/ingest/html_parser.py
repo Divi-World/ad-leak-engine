@@ -2,7 +2,6 @@
 
 Complementary to html_extractor.py. Uses DOM parsing for structured extraction.
 """
-from typing import Any
 
 
 def parse_html_to_ads(html: str, country: str = "US") -> list[dict]:

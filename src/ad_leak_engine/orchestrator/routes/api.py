@@ -400,7 +400,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "confidence": conf,
                 "leak_count": len(leaks),
                 "estimated_recovery": pack.estimated_recovery,
-                    "financial_source": "meta_graph_api" if financial_data else "heuristic",
+                    "financial_source": "meta_graph_api" if financial_data else "benchmark_estimated",
                 "teardown_path": f"output/{job_id}/{page_id}/teardown.md",
                 "evidence_mode": evidence_mode,
                 "platform_evidence": platform_evidence,

@@ -24,6 +24,7 @@ class RunnerState:
     requests_made: int = 0
     failures: int = 0
     last_active: float = 0.0
+    request_timestamps: list[float] = field(default_factory=list)
     cooldown_until: float = 0.0
 
 

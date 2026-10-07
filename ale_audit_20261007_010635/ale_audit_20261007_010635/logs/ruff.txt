@@ -1,0 +1,28 @@
+61	I001    	[*] unsorted-imports
+57	BLE001  	[ ] blind-except
+22	S110    	[ ] try-except-pass
+13	UP017   	[*] datetime-timezone-utc
+10	F401    	[*] unused-import
+ 7	UP035   	[*] deprecated-import
+ 5	S112    	[ ] try-except-continue
+ 4	F541    	[*] f-string-missing-placeholders
+ 4	SIM103  	[ ] needless-bool
+ 3	RUF013  	[ ] implicit-optional
+ 3	F841    	[-] unused-variable
+ 2	RUF012  	[ ] mutable-class-default
+ 2	C403    	[ ] unnecessary-list-comprehension-set
+ 2	PIE790  	[*] unnecessary-placeholder
+ 2	UP028   	[ ] yield-in-for-loop
+ 1	ASYNC210	[ ] blocking-http-call-in-async-function
+ 1	ASYNC230	[ ] blocking-open-call-in-async-function
+ 1	SIM102  	[ ] collapsible-if
+ 1	RUF010  	[*] explicit-f-string-type-conversion
+ 1	FURB162 	[ ] fromisoformat-replace-z
+ 1	B023    	[ ] function-uses-loop-variable
+ 1	FURB192 	[ ] sorted-min-max
+ 1	PLW1510 	[ ] subprocess-run-without-check
+ 1	F821    	[ ] undefined-name
+ 1	C414    	[ ] unnecessary-double-cast-or-process
+ 1	C401    	[ ] unnecessary-generator-set
+Found 208 errors.
+[*] 99 fixable with the `--fix` option (17 hidden fixes can be enabled with the `--unsafe-fixes` option).

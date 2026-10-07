@@ -1,0 +1,54 @@
+{
+ "sites": [
+  {
+   "host": "eltamd.com",
+   "static": {
+    "url": "https://eltamd.com/pages/contact-us",
+    "ttfb_ms": 1359,
+    "status": 200,
+    "final_url": "https://eltamd.com/pages/contact-us",
+    "bytes": 192902,
+    "server": "cloudflare",
+    "powered_by": null,
+    "markers": {
+     "fbevents_js": false,
+     "fbq_call": false,
+     "noscript_pixel": false,
+     "gtm": true,
+     "gtag": false,
+     "shopify": true,
+     "woocommerce": false,
+     "bigcommerce": false,
+     "webflow": false,
+     "klaviyo": false,
+     "tiktok_pixel": false
+    },
+    "pixel_ids_in_html": [],
+    "gtm_ids": [
+     "GTM-NS9WCS4"
+    ],
+    "note": "static HTML only: pixels injected by GTM/JS will NOT show here; see browser result"
+   },
+   "browser": {
+    "url": "https://eltamd.com/pages/contact-us",
+    "perf": {
+     "ttfb_ms": 984.7999999821186,
+     "load_ms": 11339.399999976158
+    },
+    "lcp_ms": 8112,
+    "small_tap_targets": {
+     "total": 50,
+     "under_44px": 19
+    },
+    "title": "Contact Us",
+    "total_requests": 335,
+    "meta_pixel_requests": 0,
+    "meta_events_seen": [],
+    "unhashed_user_data_params": [],
+    "capi_note": "server-side CAPI is invisible from outside; absence here proves nothing about CAPI"
+   },
+   "verdicts": []
+  }
+ ],
+ "adlib": []
+}

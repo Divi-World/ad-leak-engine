@@ -4,7 +4,7 @@
 ## Executive Summary
 We analyzed your active Meta ad campaigns and landing page infrastructure at [{{ page.url }}]({{ page.url }}).
 We identified **{{ leaks|length }} critical revenue leaks** that are currently degrading your ROAS and inflating your CPA.
-Based on your estimated Meta ad spend, we calculate: **{{ estimated_recovery }}**.
+Based on industry average CPA benchmarks for this niche, fixing these leaks prevents an estimated **{{ estimated_recovery }}**.
 
 ---
 
@@ -25,6 +25,16 @@ Based on your estimated Meta ad spend, we calculate: **{{ estimated_recovery }}*
 
 ## Recommended Fixes
 {% for fix in fixes %}
+
+{% if fix.code_snippet %}
+### 💻 Recommended Fix: {{ fix.platform | capitalize }} Implementation (Confidence: {{ fix.confidence }}%)
+**Action:** Copy and paste the following validated code into your {{ fix.platform }} environment.
+
+```{{ fix.language }}
+{{ fix.code_snippet }}
+```
+*Note: This fix has passed syntax validation and is ready for deployment.*
+{% endif %}
 ### Fix {{ loop.index }}: {{ fix.platform.title() }} Implementation (Confidence: {{ "%.0f"|format(fix.platform_confidence * 100) }}%)
 {{ fix.markdown_guide }}
 
@@ -45,3 +55,4 @@ Based on your estimated Meta ad spend, we calculate: **{{ estimated_recovery }}*
 {{ loop.index }}. {{ step }}
 {% endfor %}
 {% endfor %}
+

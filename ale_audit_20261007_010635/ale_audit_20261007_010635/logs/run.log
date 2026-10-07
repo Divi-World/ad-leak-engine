@@ -1,0 +1,44 @@
+
+[1;36m== Installing analysis tools into current environment ==[0m
+   pip_tools -> exit 0 (log: logs/pip_tools.txt)
+
+[1;36m== 1. Repository inventory ==[0m
+   tracked files: 208
+   sensitive-looking tracked filenames: 1
+   repo intel -> reports/01_repo_intel.md
+   tracked files under key dirs saved (raw/src_dirs.txt)
+
+[1;36m== 2. Static analysis + tests ==[0m
+   ruff -> exit 1 (log: logs/ruff.txt)
+   bandit -> exit 1 (log: logs/bandit.txt)
+   pip_audit -> exit 1 (log: logs/pip_audit.txt)
+   radon_cc -> exit 0 (log: logs/radon_cc.txt)
+   radon_mi -> exit 0 (log: logs/radon_mi.txt)
+   vulture -> exit 3 (log: logs/vulture.txt)
+   pytest -> exit 0 (log: logs/pytest.txt)
+TOTAL                                                                 2441   1410    42%
+======================= 116 passed, 3 skipped in 57.72s =======================
+   pytest_skips -> exit 0 (log: logs/pytest_skips.txt)
+
+[1;36m== 3. Backend API probe (http://127.0.0.1:8000) ==[0m
+   GET /openapi.json -> 200
+   GET /api/v1/jobs -> 200 (no credentials sent)
+   no CORS headers returned for foreign origin
+   report JSON for c4c6eed1: api_api_v1_scan_status_job_id_c4c6eed1.json (6127 bytes)
+   report JSON for 08e25c4e: api_api_v1_scan_status_job_id_08e25c4e.json (6288 bytes)
+
+[1;36m== 4. On-disk artefacts ==[0m
+   artefact map -> raw/artefacts.txt
+
+[1;36m== 5. Report forensics ==[0m
+C:/Users/USER/Documents/Projects/Ad-Leak-Engine/ale_audit_20261007_010635/raw/report_c4c6eed1.json: leaks=0 with_evidence=0 sites=1 ad_ids=0 money/pct claims=13
+C:/Users/USER/Documents/Projects/Ad-Leak-Engine/ale_audit_20261007_010635/raw/report_08e25c4e.json: leaks=0 with_evidence=0 sites=0 ad_ids=0 money/pct claims=13
+
+[1;36m== 6. Live verification of landing pages / ads (independent of your engine) ==[0m
+verified eltamd.com 200 
+
+[1;36m== 7. Frontend / tunnel ==[0m
+   frontend API refs -> raw/frontend_api_refs.txt
+   frontend test files: 0
+
+[1;36m== 9. Bundle ==[0m

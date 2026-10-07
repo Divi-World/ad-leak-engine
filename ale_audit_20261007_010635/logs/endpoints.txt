@@ -1,0 +1,16 @@
+paths discovered: 12
+  POST /scan
+  GET /leads
+  POST /feedback/reply
+  POST /api/v1/scan/trigger
+  GET /api/v1/jobs
+  GET /api/v1/scan/status/{job_id}
+  GET /api/v1/report/{job_id}/{page_id}/pdf
+  GET /api/v1/report/{job_id}/{page_id}
+  POST /api/v1/outreach/send
+  GET /api/v1/oauth/meta/login
+  GET /api/v1/oauth/meta/callback
+  GET /health
+GET http://127.0.0.1:8000/api/v1/scan/status/c4c6eed1-e611-4190-89b6-68bc191d8118 -> 200 6127 bytes
+GET http://127.0.0.1:8000/api/v1/scan/status/08e25c4e-302a-4baf-845a-1286371036b5 -> 200 6288 bytes
+parametrised GETs tried: 2

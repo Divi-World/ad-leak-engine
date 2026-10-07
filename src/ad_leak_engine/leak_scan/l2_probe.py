@@ -3,7 +3,6 @@
 Loads landing page via stealth browser, intercepts network requests,
 returns network_log dict consumed by L2TrackingScanner and TelemetryCollector.
 """
-from typing import Any
 
 
 def on_request(request, requests_log: list, network_log: dict):

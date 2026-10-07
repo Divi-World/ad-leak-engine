@@ -1,0 +1,536 @@
+Run started:2026-10-07 08:08:23.922748+00:00
+
+Test results:
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: src\ad_leak_engine\cli.py:4:0
+3	import os
+4	import subprocess
+5	from pathlib import Path
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\cli.py:51:8
+50	                return page.content()
+51	        except Exception:
+52	            pass
+53	        
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\cli.py:66:8
+65	            if resp.status_code == 200: return resp.text
+66	        except Exception: pass
+67	        return None
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: src\ad_leak_engine\cli.py:226:4
+225	    print("[ALE] Running full test suite...")
+226	    subprocess.run([sys.executable, "-m", "pytest", "tests/", "--tb=short"])
+227	
+
+--------------------------------------------------
+>> Issue: [B701:jinja2_autoescape_false] Using jinja2 templates with autoescape=False is dangerous and can lead to XSS. Use autoescape=True or use the select_autoescape function to mitigate XSS vulnerabilities.
+   Severity: High   Confidence: High
+   CWE: CWE-94 (https://cwe.mitre.org/data/definitions/94.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b701_jinja2_autoescape_false.html
+   Location: src\ad_leak_engine\fix_forge\codegen.py:13:19
+12	    def __init__(self):
+13	        self.env = Environment(
+14	            loader=FileSystemLoader(str(TEMPLATE_DIR)),
+15	            autoescape=False,  # Code output, not HTML
+16	            trim_blocks=True,
+17	            lstrip_blocks=True,
+18	            keep_trailing_newline=True,
+19	        )
+20	
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html
+   Location: src\ad_leak_engine\ingest\api_source.py:58:12
+57	                ads.append(self._map_api_ad(item, country))
+58	            except Exception:
+59	                continue
+60	        return ads
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\ingest\graph_financial.py:34:8
+33	                return resp.json().get("data", [])
+34	        except Exception:
+35	            pass
+36	        return []
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\ingest\graph_financial.py:90:8
+89	                    }
+90	        except Exception:
+91	            pass
+92	        return None
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\ingest\graphql_source.py:70:16
+69	                    ads.append(normalize_meta_ad(node, country))
+70	                except Exception:
+71	                    pass
+72	            for v in node.values():
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html
+   Location: src\ad_leak_engine\ingest\html_extractor.py:81:12
+80	                seen.add(ad_id)
+81	            except Exception:
+82	                continue
+83	                
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\ingest\html_parser.py:44:4
+43	
+44	    except Exception:
+45	        pass
+46	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\ingest\playwright_source.py:72:12
+71	                    html = page.content()
+72	            except Exception:
+73	                pass
+74	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\intelligence\competitor.py:45:8
+44	                }
+45	        except Exception as e:
+46	            pass
+47	        return {"page_id": page_id, "ad_count": 0, "page_name": "Unknown"}
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\intelligence\competitor.py:80:8
+79	                return competitors[:limit]
+80	        except Exception:
+81	            pass
+82	        return []
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\leak_scan\l2_probe.py:110:8
+109	
+110	        except Exception:
+111	            pass
+112	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\leak_scan\l3_site\mobile_ux.py:15:16
+14	                    page.wait_for_load_state("networkidle", timeout=15000)
+15	                except Exception:
+16	                    pass
+17	                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:203:20
+202	                            html = cffi_resp.text
+203	                    except Exception: pass
+204	                    if not html:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:250:44
+249	                                                extract_schema_emails(data)
+250	                                            except Exception: pass
+251	                                        
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:268:32
+267	                                        if discovered_emails: break
+268	                                except Exception: pass
+269	                        
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:280:32
+279	                                        break
+280	                                except Exception: pass
+281	                        
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:303:40
+302	                                                    verified.append(cand)
+303	                                        except Exception:
+304	                                            continue
+305	                                    if not verified:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:324:28
+323	                                            discovered_emails = list(set([e for e in wb_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]))[:5]
+324	                            except Exception: pass
+325	                        _write_status(job_id, {"status": "running", "progress": min(95, 58 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: platform fingerprinted as {platform}"})
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:327:16
+326	
+327	                except Exception:
+328	                    pass
+329	            
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:343:20
+342	                        evidence_mode = "snapshot"
+343	                    except Exception:
+344	                        pass
+345	            if not use_snapshot and landing and not is_invalid:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:357:16
+356	                    _write_status(job_id, {"status": "running", "progress": min(95, 45 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: L2/L3 telemetry captured (live)"})
+357	                except Exception:
+358	                    pass
+359	            if page.raw:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:369:16
+368	                    fixes.append(forge.generate(leak, "custom", conf))
+369	                except Exception:
+370	                    pass
+371	                    
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:377:12
+376	                financial_data = get_financial_data_for_page(page_id)
+377	            except Exception:
+378	                pass
+379	            if financial_data:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:388:12
+387	                competitor_data = get_competitor_benchmark(page_id, niche=keyword, country=country)
+388	            except Exception:
+389	                pass
+390	            if competitor_data:
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html
+   Location: src\ad_leak_engine\orchestrator\routes\api.py:448:20
+447	                        })
+448	                    except Exception:
+449	                        continue
+450	            if len(jobs) >= 20:
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: '[REDACTED]'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src\ad_leak_engine\orchestrator\routes\oauth.py:46:16
+45	    # Exchange code for Long-Lived Access Token
+46	    token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
+47	    payload = {
+
+--------------------------------------------------
+>> Issue: [B701:jinja2_autoescape_false] Using jinja2 templates with autoescape=False is dangerous and can lead to XSS. Use autoescape=True or use the select_autoescape function to mitigate XSS vulnerabilities.
+   Severity: High   Confidence: High
+   CWE: CWE-94 (https://cwe.mitre.org/data/definitions/94.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b701_jinja2_autoescape_false.html
+   Location: src\ad_leak_engine\outreach\bundle.py:22:19
+21	        self.compliance = ComplianceChecker()
+22	        self.env = Environment(
+23	            loader=FileSystemLoader(str(TEMPLATE_DIR)),
+24	            autoescape=False,
+25	            trim_blocks=True,
+26	            lstrip_blocks=True,
+27	        )
+28	
+
+--------------------------------------------------
+>> Issue: [B701:jinja2_autoescape_false] Using jinja2 templates with autoescape=False is dangerous and can lead to XSS. Use autoescape=True or use the select_autoescape function to mitigate XSS vulnerabilities.
+   Severity: High   Confidence: High
+   CWE: CWE-94 (https://cwe.mitre.org/data/definitions/94.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b701_jinja2_autoescape_false.html
+   Location: src\ad_leak_engine\outreach\message_gen.py:15:19
+14	    def __init__(self):
+15	        self.env = Environment(
+16	            loader=FileSystemLoader(str(TEMPLATE_DIR)),
+17	            autoescape=False,
+18	            trim_blocks=True,
+19	            lstrip_blocks=True,
+20	        )
+21	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\self_heal\human_browser.py:30:19
+29	        import camoufox.sync_api
+30	        viewport = random.choices(VIEWPORTS, weights=VIEWPORT_WEIGHTS, k=1)[0]
+31	        locale = random.choices(LOCALES, weights=LOCALE_WEIGHTS, k=1)[0]
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\self_heal\human_browser.py:31:17
+30	        viewport = random.choices(VIEWPORTS, weights=VIEWPORT_WEIGHTS, k=1)[0]
+31	        locale = random.choices(LOCALES, weights=LOCALE_WEIGHTS, k=1)[0]
+32	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\self_heal\human_browser.py:51:19
+50	    def human_pause(low: float = 0.8, high: float = 2.5):
+51	        time.sleep(random.uniform(low, high))
+52	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\self_heal\human_browser.py:67:23
+66	                    raise
+67	            time.sleep(random.uniform(0.05, 0.15))
+68	
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html
+   Location: src\ad_leak_engine\self_heal\human_browser.py:89:16
+88	                        break
+89	                except Exception:
+90	                    continue
+91	            HumanBrowser.human_pause(2.0, 4.0)
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\self_heal\proxy_manager.py:96:15
+95	        """Randomized delay to prevent collective rate limiting."""
+96	        return random.uniform(15.0, 45.0)
+97	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\self_heal\retry_policy.py:5:39
+4	    if error_type == "RateLimitError":
+5	        return (30 * (2 ** attempt)) + random.uniform(0, 5)
+6	    elif error_type == "BlockedError":
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\self_heal\retry_policy.py:7:38
+6	    elif error_type == "BlockedError":
+7	        return (60 * (attempt + 1)) + random.uniform(0, 10)
+8	    return 10.0
+
+--------------------------------------------------
+>> Issue: [B324:hashlib] Use of weak MD5 hash for security. Consider usedforsecurity=False
+   Severity: High   Confidence: High
+   CWE: CWE-327 (https://cwe.mitre.org/data/definitions/327.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html
+   Location: src\ad_leak_engine\self_heal\schema_drift.py:21:15
+20	        keys = sorted(list(data.keys()))
+21	        return hashlib.md5(json.dumps(keys).encode()).hexdigest()
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\shared\advanced_headers.py:9:10
+8	    chrome_versions = ["120.0.6099.109", "121.0.6167.85", "122.0.6261.94"]
+9	    ver = random.choice(chrome_versions)
+10	    major = ver.split(".")[0]
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\shared\advanced_headers.py:17:26
+16	        "sec-fetch-dest": "empty",
+17	        "sec-fetch-mode": random.choice(["cors", "same-origin", "navigate"]),
+18	        "sec-fetch-site": random.choice(["same-origin", "cross-site", "none"]),
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\shared\advanced_headers.py:18:26
+17	        "sec-fetch-mode": random.choice(["cors", "same-origin", "navigate"]),
+18	        "sec-fetch-site": random.choice(["same-origin", "cross-site", "none"]),
+19	        "accept-language": random.choice(["en-US,en;q=0.9", "en-GB,en;q=0.9", "en;q=0.8"]),
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\shared\advanced_headers.py:19:27
+18	        "sec-fetch-site": random.choice(["same-origin", "cross-site", "none"]),
+19	        "accept-language": random.choice(["en-US,en;q=0.9", "en-GB,en;q=0.9", "en;q=0.8"]),
+20	        "priority": random.choice(["u=1, i", "u=0, i", "u=1"]),
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\shared\advanced_headers.py:20:20
+19	        "accept-language": random.choice(["en-US,en;q=0.9", "en-GB,en;q=0.9", "en;q=0.8"]),
+20	        "priority": random.choice(["u=1, i", "u=0, i", "u=1"]),
+21	        "User-Agent": f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{ver} Safari/537.36"
+
+--------------------------------------------------
+>> Issue: [B324:hashlib] Use of weak MD5 hash for security. Consider usedforsecurity=False
+   Severity: High   Confidence: High
+   CWE: CWE-327 (https://cwe.mitre.org/data/definitions/327.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html
+   Location: src\ad_leak_engine\shared\schemas.py:17:11
+16	    seed = f"{prefix}{datetime.now(timezone.utc).isoformat()}"
+17	    return hashlib.md5(seed.encode()).hexdigest()[:12]
+18	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: src\ad_leak_engine\shared\user_agents.py:8:11
+7	def get_random_ua() -> str:
+8	    return random.choice(USER_AGENTS)
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 3746
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 43
+		Medium: 0
+		High: 5
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 0
+		Medium: 1
+		High: 47
+Files skipped (0):

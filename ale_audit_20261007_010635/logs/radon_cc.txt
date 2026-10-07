@@ -1,0 +1,25 @@
+src\ad_leak_engine\cli.py
+    F 110:0 cmd_scan - D (24)
+    F 69:0 _fetch_html_resilient - C (13)
+src\ad_leak_engine\core\cms_detector.py
+    F 8:0 detect_cms - C (15)
+src\ad_leak_engine\ingest\normalizer.py
+    F 21:0 normalize_meta_ad - C (12)
+src\ad_leak_engine\leak_scan\l1_creative.py
+    M 14:4 L1CreativeScanner.scan - C (19)
+    C 10:0 L1CreativeScanner - C (11)
+src\ad_leak_engine\leak_scan\l2_probe.py
+    C 41:0 L2LiveProbe - C (13)
+    M 44:4 L2LiveProbe.probe - C (12)
+src\ad_leak_engine\leak_scan\l2_tracking.py
+    M 9:4 L2TrackingScanner.scan - C (16)
+src\ad_leak_engine\leak_scan\l3_scanner.py
+    M 13:4 L3SiteScanner.scan - D (25)
+    C 9:0 L3SiteScanner - C (14)
+src\ad_leak_engine\orchestrator\routes\api.py
+    F 74:0 run_scan_pipeline - F (107)
+src\ad_leak_engine\outreach\bundle.py
+    M 82:4 OutreachBuilder._estimate_recovery - C (19)
+    M 66:4 OutreachBuilder._generate_teardown - C (15)
+src\ad_leak_engine\outreach\message_gen.py
+    M 34:4 MessageGenerator._extract_observation - D (24)

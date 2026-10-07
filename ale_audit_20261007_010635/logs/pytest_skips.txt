@@ -1,0 +1,41 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Users\USER\Documents\Projects\Ad-Leak-Engine
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.15.1, asyncio-1.4.0, cov-7.1.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 119 items
+
+tests\integration\test_chaos.py ....                                     [  3%]
+tests\integration\test_fix_pipeline.py .                                 [  4%]
+tests\integration\test_full_pipeline.py .                                [  5%]
+tests\integration\test_leak_pipeline.py .                                [  5%]
+tests\integration\test_live_crawl.py s                                   [  6%]
+tests\integration\test_live_ingest.py ss                                 [  8%]
+tests\integration\test_swarm.py ........                                 [ 15%]
+tests\unit\test_api_source.py ....                                       [ 18%]
+tests\unit\test_contact_mailto.py ..                                     [ 20%]
+tests\unit\test_dispatcher.py ....                                       [ 23%]
+tests\unit\test_feedback.py ...                                          [ 26%]
+tests\unit\test_field_mapper.py ......                                   [ 31%]
+tests\unit\test_fingerprint.py .........                                 [ 38%]
+tests\unit\test_fix_forge.py .........                                   [ 46%]
+tests\unit\test_forge_custom.py ...                                      [ 48%]
+tests\unit\test_html_extractor.py ........                               [ 55%]
+tests\unit\test_human_browser.py ....                                    [ 58%]
+tests\unit\test_ingest.py ......                                         [ 63%]
+tests\unit\test_l1_scanner.py ......                                     [ 68%]
+tests\unit\test_l2_scanner.py ....                                       [ 72%]
+tests\unit\test_l3_scanner.py ......                                     [ 77%]
+tests\unit\test_outreach.py .....                                        [ 81%]
+tests\unit\test_outreach_polish.py .....                                 [ 85%]
+tests\unit\test_schemas.py ..........                                    [ 94%]
+tests\unit\test_swarm_aggregator.py .                                    [ 94%]
+tests\unit\test_syntax_validation.py ......                              [100%]
+
+=========================== short test summary info ===========================
+SKIPPED [1] tests\integration\test_live_crawl.py:14: requires --run-live to hit real targets
+SKIPPED [1] tests\integration\test_live_ingest.py:8: requires --run-live to hit real targets
+SKIPPED [1] tests\integration\test_live_ingest.py:16: requires --run-live to hit real targets
+======================= 116 passed, 3 skipped in 33.73s =======================

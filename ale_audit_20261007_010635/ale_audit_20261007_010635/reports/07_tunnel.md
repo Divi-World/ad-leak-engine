@@ -1,0 +1,13 @@
+# Tunnel probe
+- GET / -> 200, 16463 bytes (no credentials sent)
+- js chunks referenced: 15
+- API references baked into the browser bundle:
+  - /api/v1/oauth/meta/login
+  - http://localhost
+  - http://localhost:3000/_next/static/chunks/pages/index.js?ts=1631600000000:2:1
+  - http://localhost:3000/_next/static/chunks/pages/index.js?ts=1631600000000:2:1)
+  - http://localhost:8000/api/v1
+- VERDICT: bundle hard-codes a LOCALHOST backend: any visitor via the tunnel calls THEIR OWN localhost, so remote users cannot use the app
+- tunnel GET /api/v1/jobs -> 404 (0 bytes)
+- tunnel GET /api/v1/health -> 404 (0 bytes)
+- tunnel GET /docs -> 404 (0 bytes)
