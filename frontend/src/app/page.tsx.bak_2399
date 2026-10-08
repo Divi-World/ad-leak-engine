@@ -122,35 +122,29 @@ export default function Home() {
 
   useEffect(() => {
     if (!jobId || scanStatus === "completed" || scanStatus === "error") return;
-
-    const eventSource = new EventSource(`${apiUrl}/scan/stream/${jobId}`);
-
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.status === "completed") {
-        setResults(data.results || []);
-        setScanStatus("completed");
-        setIsScanning(false);
-        eventSource.close();
-      } else if (data.status === "error") {
-        setScanStatus("error");
-        setErrorDetail(data.message || "An error occurred during the scan.");
-        setIsScanning(false);
-        eventSource.close();
-      } else {
-        setProgress(data.progress || 0);
-        setStage(data.stage || "Processing...");
+    const poll = setInterval(async () => {
+      try {
+        const response = await fetch(`${apiUrl}/scan/status/${jobId}`, { headers: { "X-API-Key": process.env.NEXT_PUBLIC_API_KEY || "dev_key_2399" } });
+        const data = await response.json();
+        if (data.status === "completed") {
+          setResults(data.results || []);
+          setScanStatus("completed");
+          setIsScanning(false);
+          clearInterval(poll);
+        } else if (data.status === "error") {
+          setScanStatus("error");
+          setErrorDetail(data.message || "");
+          setIsScanning(false);
+          clearInterval(poll);
+        } else {
+          setProgress(data.progress || 0);
+          setStage(data.stage || "Processing...");
+        }
+      } catch (error) {
+        console.error("Polling failed:", error);
       }
-    };
-
-    eventSource.onerror = (error) => {
-      console.error("SSE Error:", error);
-      eventSource.close();
-    };
-
-    return () => {
-      eventSource.close();
-    };
+    }, 3000);
+    return () => clearInterval(poll);
   }, [jobId, scanStatus, apiUrl]);
 
   const toggleExpand = async (res: ScanResult) => {

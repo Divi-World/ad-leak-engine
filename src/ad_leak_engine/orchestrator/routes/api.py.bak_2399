@@ -530,26 +530,17 @@ async def send_outreach(request: dict) -> dict:
 
 @router.get("/scan/stream/{job_id}")
 async def stream_scan_status(job_id: str):
-    """[SEED: 2399] File-based SSE endpoint matching get_scan_status logic."""
     async def event_generator():
         import asyncio, json
-        from pathlib import Path
-        status_file = Path(f"output/{job_id}/status.json")
-        
         while True:
-            if status_file.exists():
-                try:
-                    with open(status_file, "r", encoding="utf-8") as f:
-                        job = json.load(f)
-                    yield f"data: {json.dumps(job)}\n\n"
-                    if job.get("status") in ["completed", "error"]:
-                        break
-                except (json.JSONDecodeError, ValueError):
-                    yield 'data: {"status": "running", "progress": 0, "stage": "Processing scan data..."}\n\n'
+            job = jobs.get(job_id)
+            if job:
+                yield f"data: {json.dumps(job)}\n\n"
+                if job.get("status") in ["completed", "error"]:
+                    break
             else:
-                yield 'data: {"status": "not_found"}\n\n'
+                yield f"data: {json.dumps({'status': 'not_found'})}\n\n"
                 break
             await asyncio.sleep(2)
-            
     from fastapi.responses import StreamingResponse
     return StreamingResponse(event_generator(), media_type="text/event-stream")
