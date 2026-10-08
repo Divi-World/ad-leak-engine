@@ -1,4 +1,4 @@
-name: Nightly Scan [SEED: 2399]
+name: "Nightly Scan [SEED: 2399]"
 
 on:
   schedule:
@@ -19,7 +19,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
