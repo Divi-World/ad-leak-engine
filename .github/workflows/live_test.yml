@@ -1,9 +1,9 @@
 name: Live Integration Tests [SEED: 2399 Native Stealth]
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 4 * * 1'
+  workflow_dispatch: # Manual trigger for acquirer demonstration
+  push:
+    branches: [ main ]
 
 jobs:
   live-test:
