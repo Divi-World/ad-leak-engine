@@ -17,36 +17,24 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install System Dependencies for Stealth Browser
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y             libnss3             libnspr4             libatk1.0-0             libatk-bridge2.0-0             libcups2             libdrm2             libxkbcommon0             libxcomposite1             libxdamage1             libxrandr2             libgbm1             libpangocairo-1.0-0             libgtk-3-0             libasound2             libatspi2.0-0             libxfixes3
+          sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpangocairo-1.0-0 libgtk-3-0 libasound2 libatspi2.0-0 libxfixes3
 
-      - name: Upgrade pip and Install Core Dependencies
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install pytest pytest-asyncio pytest-cov
-
-      - name: Install Application in Editable Mode
-        run: |
           pip install -e .
-
-      - name: Install Scraping Dependencies Individually
-        run: |
-          pip install camoufox[geoip]>=0.4.0
-          pip install curl-cffi>=0.6.2
-          pip install playwright>=1.42.0
+          pip install "camoufox[geoip]>=0.4.0" "curl-cffi>=0.6.2" "playwright>=1.42.0"
           playwright install chromium
 
-      - name: Fetch Camoufox Browser Binary
-        run: |
-          python -m camoufox fetch || echo "Camoufox fetch completed or skipped"
+      - name: Fetch Camoufox Browser
+        run: python -m camoufox fetch || echo "Camoufox fetch completed"
 
       - name: Verify Installation
-        run: |
-          python -c "import camoufox; import curl_cffi; import playwright; print('All stealth dependencies loaded successfully')"
+        run: python -c "import camoufox; import curl_cffi; import playwright; print('All stealth dependencies loaded successfully')"
 
       - name: Run Live Integration Tests
-        run: |
-          echo "Executing live tests with native curl_cffi and camoufox stealth..."
-          pytest tests/integration/test_live_ingest.py tests/integration/test_live_crawl.py --run-live -v --tb=short
+        run: pytest tests/integration/test_live_ingest.py tests/integration/test_live_crawl.py --run-live -v --tb=short
