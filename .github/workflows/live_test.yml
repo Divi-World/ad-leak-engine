@@ -1,0 +1,33 @@
+name: Live Integration Tests [SEED: 2399 Native Stealth]
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1'
+
+jobs:
+  live-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies & Native Stealth Stack
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test,scrape]"
+          # Install system dependencies required for stealth browsers
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpangocairo-1.0-0 libgtk-3-0 libasound2
+          # Fetch the camoufox stealth browser binary (System's native WAF bypass)
+          python -m camoufox fetch
+
+      - name: Run Live Integration Tests (Native Stealth)
+        run: |
+          echo "Executing live tests using native curl_cffi and camoufox stealth..."
+          pytest tests/integration/test_live_ingest.py tests/integration/test_live_crawl.py --run-live -v --tb=short
