@@ -263,7 +263,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                                             if e and '@' in e and not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io', '.example.com')):
                                                 cleaned.append(e)
                                         
-                                        discovered_emails = list(set(cleaned))[:5]
+                                        # [SEED: 2399] Filter out form URLs - only keep actual email addresses
+                                        discovered_emails = [e for e in set(cleaned) if re.match(r'^[^@]+@[^@]+\.[^@]+$', e)][:5]
                                         if discovered_emails: break
                                 except Exception: pass
                         
