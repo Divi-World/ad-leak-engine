@@ -19,3 +19,16 @@ When a prospect replies to your outreach, feed it back to the engine to make it 
 
 System Health:
 ./scripts/ale test
+
+Install the New Dependencies:
+   pip install -e ".[scrape]"
+
+Ensure Redis is Running:
+If you don't have Redis installed locally, the easiest way on Windows is via Docker:
+   docker run -d -p 6379:6379 redis:alpine
+
+Start the Celery Worker (in a NEW terminal):
+   celery -A src.ad_leak_engine.orchestrator.celery_app worker --loglevel=info --pool=solo
+
+Start Uvicorn (in your main backend terminal):
+    uvicorn src.ad_leak_engine.orchestrator.app:app --reload --port 8000

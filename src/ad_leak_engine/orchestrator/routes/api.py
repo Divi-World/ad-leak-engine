@@ -4,7 +4,8 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter
+from ..tasks import run_scan_pipeline_task
 from pydantic import BaseModel
 
 from ...ingest.playwright_source import PlaywrightSource
@@ -418,13 +419,13 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
             json.dump({"status": "error", "message": str(e)}, f)
 
 @router.post("/scan/trigger")
-async def trigger_scan(request: ScanRequest, background_tasks: BackgroundTasks) -> dict:
+async def trigger_scan(request: ScanRequest) -> dict:
     job_id = str(uuid.uuid4())
     os.makedirs(f"output/{job_id}", exist_ok=True)
     with open(f"output/{job_id}/status.json", "w") as f:
         json.dump({"status": "pending", "progress": 0}, f)
         
-    background_tasks.add_task(run_scan_pipeline, job_id, request.keyword, request.country, request.limit)
+    run_scan_pipeline_task.delay(job_id, request.keyword, request.country, request.limit)
     return {"status": "accepted", "job_id": job_id, "message": "Scan initiated"}
 
 @router.get("/jobs")
