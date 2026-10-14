@@ -1,5 +1,17 @@
- uvicorn src.ad_leak_engine.orchestrator.app:app --reload --port 8000
+uvicorn src.ad_leak_engine.orchestrator.app:app --reload --port 8000
 
 
- npm run dev
+npm run dev
+
+
+docker run -d -p 6379:6379 redis:alpine
+
+
+celery -A src.ad_leak_engine.orchestrator.celery_app worker --loglevel=info --pool=solo
+
+
+cd /c/Users/USER/Documents/Projects/Ad-Leak-Engine
+
+
+source .venv/Scripts/activate
 
