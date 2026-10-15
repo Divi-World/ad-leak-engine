@@ -265,7 +265,14 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                                                 cleaned.append(e)
                                         
                                         # [SEED: 2399] Filter out form URLs - only keep actual email addresses
-                                        discovered_emails = [e for e in set(cleaned) if re.match(r'^[^@]+@[^@]+\.[^@]+$', e)][:5]
+                                        # [SEED: 2399] ELITE SANITIZATION: Strip HTML/Unicode artifacts (e.g., u003e)
+                                        import html
+                                        _sanitized = []
+                                        for _e in set(cleaned):
+                                            _clean = html.unescape(str(_e)).replace('\\u003e', '').strip('><"\' \t\n\r')
+                                            if re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', _clean):
+                                                _sanitized.append(_clean.lower())
+                                        discovered_emails = list(set(_sanitized))[:5]
                                         if discovered_emails: break
                                 except Exception: pass
                         
