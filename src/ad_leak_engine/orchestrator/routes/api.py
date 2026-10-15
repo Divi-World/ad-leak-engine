@@ -284,7 +284,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                                     import httpx
                                     r = httpx.head(form_url, timeout=5.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
                                     if r.status_code == 200:
-                                        discovered_emails = [f"FORM:{form_url}"]
+                                        pass  # [SEED: 2399] ELITE: Do not pollute email array with FORM URLs. Leave empty for honest reporting.
                                         break
                                 except Exception: pass
                         
@@ -413,7 +413,10 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "teardown_path": f"output/{job_id}/{page_id}/teardown.md",
                 "evidence_mode": evidence_mode,
                 "platform_evidence": platform_evidence,
-                "discovered_emails": discovered_emails,
+                "discovered_emails": [
+                    e for e in discovered_emails
+                    if isinstance(e, str) and re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", e.strip())
+                ],
                 "competitor_benchmark": competitor_data is not None
             })
             processed += 1
