@@ -265,14 +265,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                                                 cleaned.append(e)
                                         
                                         # [SEED: 2399] Filter out form URLs - only keep actual email addresses
-                                        # [SEED: 2399] ELITE SANITIZATION: Strip HTML/Unicode artifacts (e.g., u003e)
-                                        import html
-                                        _sanitized = []
-                                        for _e in set(cleaned):
-                                            _clean = html.unescape(str(_e)).replace('\\u003e', '').strip('><"\' \t\n\r')
-                                            if re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', _clean):
-                                                _sanitized.append(_clean.lower())
-                                        discovered_emails = list(set(_sanitized))[:5]
+                                        discovered_emails = [e for e in set(cleaned) if _re_dom.match(r'^[^@]+@[^@]+\.[^@]+$', e)][:5]
                                         if discovered_emails: break
                                 except Exception: pass
                         
@@ -284,7 +277,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                                     import httpx
                                     r = httpx.head(form_url, timeout=5.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
                                     if r.status_code == 200:
-                                        pass  # [SEED: 2399] ELITE: Do not pollute email array with FORM URLs. Leave empty for honest reporting.
+                                        discovered_emails = [f"FORM:{form_url}"]
                                         break
                                 except Exception: pass
                         
@@ -413,10 +406,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "teardown_path": f"output/{job_id}/{page_id}/teardown.md",
                 "evidence_mode": evidence_mode,
                 "platform_evidence": platform_evidence,
-                "discovered_emails": [
-                    e for e in discovered_emails
-                    if isinstance(e, str) and re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", e.strip())
-                ],
+                "discovered_emails": discovered_emails,
                 "competitor_benchmark": competitor_data is not None
             })
             processed += 1

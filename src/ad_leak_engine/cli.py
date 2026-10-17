@@ -105,6 +105,25 @@ def _fetch_html_resilient(url: str) -> str | None:
                         return wb_html_resp.text
     except Exception as e:
         logger.error(f"Wayback fetch failed: {e}", extra={"stage": "ingest", "action": "fetch_html_wayback"})
+
+    # [SEED: 2399] SMART NETWORK PAUSE/RESUME (Self-Healing)
+    import time as _time_net
+    import httpx as _httpx_net
+    try:
+        _httpx_net.get("https://1.1.1.1", timeout=5.0)
+    except Exception:
+        logger.warning("Global network drop detected. Pausing execution until connection restores...")
+        while True:
+            _time_net.sleep(10)
+            try:
+                _httpx_net.get("https://1.1.1.1", timeout=5.0)
+                logger.info("Network restored. Resuming elite execution.")
+                break
+            except Exception:
+                continue
+        # Retry stealth fetch immediately after network restore
+        return _fetch_html_stealth(url)
+        
     return None
 
 def cmd_scan(keyword: str, country: str, limit: int, skip_crawl: bool):
