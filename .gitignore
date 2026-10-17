@@ -37,3 +37,19 @@ setup_restore.sh
 
 ROADMAP_PHASES_25_30.md
 SYSTEM_PRINCIPLES.md
+What I will implement.txt
+
+output
+# Generated output — never commit
+/output/
+/output/_forensics/
+/output/**/*.json
+/output/**/*.txt
+
+# Local one-off shell scripts at repo root
+/*.sh
+/*.shBack
+
+# Logs
+*.log
+/celery_new.log
