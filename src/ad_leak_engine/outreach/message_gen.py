@@ -48,6 +48,8 @@ class MessageGenerator:
             return "automated deep-scan was blocked by bot protection"
         if sig == "pixel_not_firing":
             return "your Meta Pixel is not firing on the landing page"
+        if sig == "pixel_script_detected_but_not_firing":
+            return "your Meta Pixel scripts are present but not firing a PageView event"
         if sig == "unhashed_pii":
             return "your Conversions API is sending unhashed customer data"
         if sig == "missing_purchase_event":
@@ -64,6 +66,11 @@ class MessageGenerator:
             return "your AddToCart events are not reaching Meta"
         if sig == "no_retargeting":
             return "you are not retargeting your site visitors"
+        if sig == "retargeting_gap_not_observed":
+            sampled = ev.get("sampled_active_ads")
+            if sampled:
+                return f"we observed {sampled} active ads but no retargeting/BOFU audience markers in the sampled Meta Ad Library pool"
+            return "no retargeting/BOFU audience markers were observed in the sampled Meta Ad Library pool"
         if sig == "generic_hook":
             body = ev.get("ad_body", "")
             snippet = (body[:60].strip().replace('\n', ' ') + "...") if len(body) > 60 else body.strip().replace('\n', ' ')

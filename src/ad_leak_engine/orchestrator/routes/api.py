@@ -67,6 +67,23 @@ def _write_status(job_id: str, payload: dict):
     with open(f"output/{job_id}/status.json", "w", encoding="utf-8") as _f:
         json.dump(payload, _f)
 
+
+def _fail_job(job_id: str, exc: Exception, stage: str = "pipeline") -> None:
+    """[SEED: 2399] Bulletproof failure telemetry. Never fail silently."""
+    import traceback
+    from datetime import datetime, timezone
+
+    payload = {
+        "status": "error",
+        "job_id": job_id,
+        "message": str(exc),
+        "exception_type": type(exc).__name__,
+        "stage": stage,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "traceback": traceback.format_exc(),
+    }
+    _write_status(job_id, payload)
+
 class ScanRequest(BaseModel):
     keyword: str
     country: str = "US"
@@ -298,7 +315,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                                             e = e.strip().split('?')[0]
                                             if e and '@' in e and not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io')):
                                                 final_s.append(e)
-                                        discovered_emails = [e for e in set(final_s) if _re_dom.match(r'^[^@]+@[^@]+\.[^@]+$', e)][:5]
+                                        discovered_emails = [e for e in set(final_s) if _re_stealth.match(r'^[^@]+@[^@]+\.[^@]+$', e)][:5]
                                         if discovered_emails: break
                                 except Exception: pass
                         
@@ -331,17 +348,17 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                             except ImportError:
                                 pass
 
-                        # Wayback Fallback for Emails (Defeats bot protection)
+                        # Wayback Fallback for Emails (Defeats bot protection via curl_cffi)
                         if not discovered_emails:
                             try:
-                                import httpx
-                                wb_resp = httpx.get(f"http://archive.org/wayback/available?url={domain_lower}", timeout=10.0)
+                                from curl_cffi import requests as cffi_requests
+                                wb_resp = cffi_requests.get(f"http://archive.org/wayback/available?url={domain_lower}", impersonate="chrome120", timeout=10.0)
                                 if wb_resp.status_code == 200:
                                     wb_data = wb_resp.json()
                                     if "archived_snapshots" in wb_data and "closest" in wb_data["archived_snapshots"]:
                                         wb_url = wb_data["archived_snapshots"]["closest"].get("url")
                                         if wb_url:
-                                            wb_html = httpx.get(wb_url, timeout=15.0).text
+                                            wb_html = cffi_requests.get(wb_url, impersonate="chrome120", timeout=15.0).text
                                             wb_emails = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', wb_html)
                                             discovered_emails = list(set([e for e in wb_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]))[:5]
                             except Exception: pass
@@ -407,13 +424,63 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
             competitor_data = None
             try:
                 from ...intelligence.competitor import get_competitor_benchmark
-                competitor_data = get_competitor_benchmark(page_id, niche=keyword, country=country)
+                competitor_data = get_competitor_benchmark(page_id, niche=keyword, country=country, observed_ads=ads)
             except Exception:
                 pass
             if competitor_data:
                 page.raw = page.raw or {}
                 page.raw["competitor_data"] = competitor_data
             pack = builder.build(page, leaks, fixes, financial_data=financial_data)
+            if competitor_data:
+                try:
+                    teardown_path = f"output/{job_id}/{page_id}/teardown.md"
+                    if os.path.exists(teardown_path):
+                        metrics = competitor_data.get("metrics", {}) if isinstance(competitor_data, dict) else {}
+                        coverage = competitor_data.get("coverage", {}) if isinstance(competitor_data, dict) else {}
+                        competitors = competitor_data.get("competitors", []) if isinstance(competitor_data, dict) else []
+
+                        prospect_count = metrics.get("prospect_ad_count")
+                        avg_count = metrics.get("avg_competitor_ads")
+                        gap_count = metrics.get("gap")
+
+                        comp_lines = []
+                        for c in competitors[:3]:
+                            name = c.get("page_name", "Unknown")
+                            count = c.get("active_ad_count", 0)
+                            media = ", ".join(c.get("media_types", []) or ["unknown"])
+                            comp_lines.append(f"- **{name}**: {count} active observed ads | media: {media}")
+
+                        competitor_md = [
+                            "",
+                            "---",
+                            "",
+                            "## Competitor Intelligence (Observed Meta Ad Library Pool)",
+                            f"- **Niche queried:** {metrics.get('niche', keyword)}",
+                            f"- **Country:** {metrics.get('country', country)}",
+                            f"- **Prospect active observed ads:** {prospect_count if prospect_count is not None else 'n/a'}",
+                            f"- **Top observed competitor average:** {avg_count if avg_count is not None else 'n/a'}",
+                            f"- **Observed gap vs top competitors:** {gap_count if gap_count is not None else 'n/a'}",
+                            f"- **Coverage:** {coverage.get('observed_ads', len(ads))} ads across {coverage.get('observed_pages', 'n/a')} advertiser pages in this audit pool.",
+                            "",
+                            "### Top observed competitors in this pool",
+                        ]
+
+                        if comp_lines:
+                            competitor_md.extend(comp_lines)
+                        else:
+                            competitor_md.append("- No competing advertiser pages were observed in the current audit pool.")
+
+                        competitor_md.extend([
+                            "",
+                            "*Note: This benchmark is evidence-based from the live Ad Library pool captured during this audit. It is not a claim of total global ad count unless authenticated Meta API data is connected.*",
+                            "",
+                        ])
+
+                        with open(teardown_path, "a", encoding="utf-8") as _cf:
+                            _cf.write("\n".join(competitor_md))
+                except Exception:
+                    pass
+
             _write_status(job_id, {"status": "running", "progress": min(95, 75 + int(20 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: forging {platform} fixes & teardown"})
 
             results.append({
@@ -436,18 +503,81 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
             json.dump({"status": "completed", "results": results}, f)
             
     except Exception as e:
-        with open(f"output/{job_id}/status.json", "w") as f:
-            json.dump({"status": "error", "message": str(e)}, f)
+        _fail_job(job_id, e, stage="run_scan_pipeline")
+        raise
 
 @router.post("/scan/trigger")
 async def trigger_scan(request: ScanRequest) -> dict:
     job_id = str(uuid.uuid4())
     os.makedirs(f"output/{job_id}", exist_ok=True)
-    with open(f"output/{job_id}/status.json", "w") as f:
+    status_file = f"output/{job_id}/status.json"
+
+    with open(status_file, "w", encoding="utf-8") as f:
         json.dump({"status": "pending", "progress": 0}, f)
-        
-    run_scan_pipeline_task.delay(job_id, request.keyword, request.country, request.limit)
-    return {"status": "accepted", "job_id": job_id, "message": "Scan initiated"}
+
+    try:
+        logger.info(
+            f"[DISPATCH] Queuing scan job {job_id}",
+            extra={"stage": "dispatch", "action": "trigger", "job_id": job_id},
+        )
+
+        task_result = run_scan_pipeline_task.delay(
+            job_id,
+            request.keyword,
+            request.country,
+            request.limit,
+        )
+        celery_task_id = str(getattr(task_result, "id", ""))
+
+        with open(status_file, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "status": "queued",
+                    "progress": 5,
+                    "job_id": job_id,
+                    "celery_task_id": celery_task_id,
+                },
+                f,
+            )
+
+        logger.info(
+            f"[DISPATCH] Job {job_id} queued as Celery task {celery_task_id}",
+            extra={"stage": "dispatch", "action": "queued", "job_id": job_id},
+        )
+
+        return {
+            "status": "accepted",
+            "job_id": job_id,
+            "celery_task_id": celery_task_id,
+            "message": "Scan initiated",
+        }
+
+    except Exception as e:
+        import traceback
+
+        error_payload = {
+            "status": "error",
+            "job_id": job_id,
+            "message": f"Dispatch failure: {e}",
+            "exception_type": type(e).__name__,
+            "stage": "dispatch",
+            "traceback": traceback.format_exc(),
+        }
+
+        with open(status_file, "w", encoding="utf-8") as f:
+            json.dump(error_payload, f)
+
+        logger.error(
+            f"[DISPATCH] Failed to queue job {job_id}: {e}",
+            exc_info=True,
+            extra={"stage": "dispatch", "action": "failed", "job_id": job_id},
+        )
+
+        return {
+            "status": "error",
+            "job_id": job_id,
+            "message": error_payload["message"],
+        }
 
 @router.get("/jobs")
 def list_jobs() -> dict:

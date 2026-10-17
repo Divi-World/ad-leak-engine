@@ -18,7 +18,7 @@ class L1CreativeScanner(AbstractLeakScanner):
             return leaks
 
         now = datetime.now(timezone.utc)
-        
+
         # 1. Creative fatigue
         oldest_ad = min(active_ads, key=lambda a: a.start_date)
         days_running = (now - oldest_ad.start_date).days
@@ -68,13 +68,36 @@ class L1CreativeScanner(AbstractLeakScanner):
                 evidence={"missing_cta_count": missing_cta_count},
                 recommendation="All ads use weak or missing CTAs. Use action-oriented CTAs."
             ))
-            
+
         # [SEED: 2399] Advanced L1 Signals
         for ad in active_ads:
             if 'detect_generic_hook' in globals() and detect_generic_hook(ad):
-                leaks.append(Leak(page_id=page.id, tier="L1", signal="generic_hook", severity=0.6, recommendation="Add specific geo or pain point to copy", evidence={"ad_id": ad.id, "ad_body": ad.body or ""}))
-        if 'detect_no_retargeting' in globals() and detect_no_retargeting(page):
-            leaks.append(Leak(page_id=page.id, tier="L1", signal="no_retargeting", severity=0.7, recommendation="Implement custom audience retargeting", evidence={}))
+                leaks.append(Leak(
+                    page_id=page.id,
+                    tier="L1",
+                    signal="generic_hook",
+                    severity=0.6,
+                    recommendation="Add specific geo or pain point to copy",
+                    evidence={"ad_id": ad.id, "ad_body": ad.body or ""}
+                ))
+
+        # [SEED: 2399] Evidence-based retargeting intelligence.
+        # This does not claim private audience knowledge. It reports absence of
+        # retargeting/BOFU markers in the observed public Meta Ad Library pool.
+        retarget_gap, retarget_evidence = detect_retargeting_gap(page)
+        if retarget_gap:
+            leaks.append(Leak(
+                page_id=page.id,
+                tier="L1",
+                signal="retargeting_gap_not_observed",
+                severity=0.55,
+                recommendation=(
+                    "No retargeting/BOFU audience markers were observed in the sampled "
+                    "Meta Ad Library pool. Implement or verify cart/view/video/purchase "
+                    "retargeting sequences using pixel and CAPI custom audiences."
+                ),
+                evidence=retarget_evidence
+            ))
 
         return leaks
 
@@ -90,6 +113,114 @@ def detect_generic_hook(ad) -> bool:
     return not has_city and not has_pain and len(body) > 20
 
 def detect_no_retargeting(page) -> bool:
-    # Heuristic: All ads target broad, no custom audience indicators in raw data
-    return True # Placeholder for broad targeting heuristic
+    # [SEED: 2399] Legacy compatibility guard.
+    # The old boolean claim was hallucination-prone. Real evidence is now handled
+    # by detect_retargeting_gap(), which returns observed-pool evidence.
+    return False
+
+
+def detect_retargeting_gap(page) -> tuple[bool, dict]:
+    """
+    [SEED: 2399] Evidence-based retargeting gap detector.
+
+    This does NOT claim to know private Meta custom audience settings.
+    It only reports whether retargeting/BOFU markers are observable in the
+    sampled public Meta Ad Library pool: landing URLs, UTM parameters,
+    ad headlines, ad bodies, and CTAs.
+    """
+    from urllib.parse import urlparse, parse_qs
+
+    ads = getattr(page, "active_ads", []) or []
+    if not ads:
+        return False, {}
+
+    retarget_terms = (
+        "retarget",
+        "remarket",
+        "rt",
+        "cart",
+        "abandon",
+        "view",
+        "video",
+        "purchase",
+        "lead",
+        "warm",
+        "engaged",
+        "visitor",
+        "sequence",
+        "seq",
+        "funnel",
+        "bofu",
+        "mofu",
+        "bottom",
+        "mid",
+    )
+
+    prospecting_terms = (
+        "prospect",
+        "prospecting",
+        "cold",
+        "new",
+        "broad",
+        "interest",
+        "lookalike",
+        "lal",
+        "tofu",
+        "top",
+        "acquisition",
+        "general",
+    )
+
+    sampled_urls = []
+    retarget_hits = []
+    prospecting_hits = []
+
+    for ad in ads[:50]:
+        url = getattr(ad, "landing_url", "") or ""
+        title = getattr(ad, "title", "") or ""
+        body = getattr(ad, "body", "") or ""
+        cta = getattr(ad, "cta", "") or ""
+
+        blob = " ".join([url, title, body, cta]).lower()
+
+        utm_blob = ""
+        if url:
+            sampled_urls.append(url)
+            try:
+                q = parse_qs(urlparse(url).query)
+                utm_parts = [
+                    (q.get("utm_campaign", [""])[0] or "").lower(),
+                    (q.get("utm_content", [""])[0] or "").lower(),
+                    (q.get("utm_term", [""])[0] or "").lower(),
+                ]
+                utm_blob = " ".join(utm_parts)
+            except Exception:
+                utm_blob = ""
+
+        full_blob = f"{blob} {utm_blob}".lower()
+
+        for term in retarget_terms:
+            if term in full_blob and term not in retarget_hits:
+                retarget_hits.append(term)
+
+        for term in prospecting_terms:
+            if term in full_blob and term not in prospecting_hits:
+                prospecting_hits.append(term)
+
+    evidence = {
+        "sampled_active_ads": len(ads),
+        "sampled_urls": sampled_urls[:10],
+        "retarget_markers_observed": retarget_hits,
+        "prospecting_markers_observed": prospecting_hits,
+        "interpretation": (
+            "No retargeting/BOFU markers were observed in the sampled public "
+            "Meta Ad Library pool for this prospect."
+        ),
+    }
+
+    if retarget_hits:
+        return False, evidence
+
+    return True, evidence
+
 
