@@ -65,7 +65,9 @@ class MessageGenerator:
         if sig == "no_retargeting":
             return "you are not retargeting your site visitors"
         if sig == "generic_hook":
-            return "your ad hooks are too generic to stop the scroll"
+            body = ev.get("ad_body", "")
+            snippet = (body[:60].strip().replace('\n', ' ') + "...") if len(body) > 60 else body.strip().replace('\n', ' ')
+            return f"your ad hook ('{snippet}') is too generic to stop the scroll" if snippet else "your ad hooks are too generic to stop the scroll"
         if sig == "no_video_creative":
             return "you are missing video creatives in your ad mix"
         if sig == "small_tap_targets":
