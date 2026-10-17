@@ -120,7 +120,7 @@ def get_financial_data_for_page(page_id: str) -> dict | None:
             # SEED 2399: Fallback to environment variable for local CLI testing
             token = os.getenv("META_ACCESS_TOKEN")
             if not token:
-            return None
+                return None
         ingestor = GraphAPIFinancialIngestor(token)
         return ingestor.get_page_ad_spend(page_id)
     except Exception:

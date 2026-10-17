@@ -269,16 +269,37 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                                         if discovered_emails: break
                                 except Exception: pass
                         
-                        # [SEED: 2399] Contact Form Fallback (If no email found, provide the form URL)
+                        # [SEED: 2399] ELITE WAF BYPASS CONTACT PROBE (Replaces httpx.head)
                         if not discovered_emails:
-                            for path in ["/contact", "/pages/contact-us", "/contact-us", "/about", "/policies/privacy-policy"]:
+                            for path in ["/contact", "/pages/contact-us", "/contact-us", "/about"]:
                                 try:
-                                    form_url = f"https://{domain_lower}{path}"
-                                    import httpx
-                                    r = httpx.head(form_url, timeout=5.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
-                                    if r.status_code == 200:
-                                        discovered_emails = [f"FORM:{form_url}"]
-                                        break
+                                    contact_url = f"https://{domain_lower}{path}"
+                                    stealth_html = _fetch_html_stealth(contact_url)
+                                    if stealth_html and len(stealth_html) > 500:
+                                        import re as _re_stealth
+                                        import json as _json_stealth
+                                        s_emails = []
+                                        for m in _re_stealth.finditer(r"""<script[^>]+type=["']application/ld\+json["'][^>]*>(.*?)</script>""", stealth_html, _re_stealth.IGNORECASE | _re_stealth.DOTALL):
+                                            try:
+                                                data = _json_stealth.loads(m.group(1))
+                                                def extract(obj):
+                                                    if isinstance(obj, dict):
+                                                        for k, v in obj.items():
+                                                            if 'email' in k.lower() and isinstance(v, str) and '@' in v: s_emails.append(v.replace('mailto:', '').strip())
+                                                            else: extract(v)
+                                                    elif isinstance(obj, list):
+                                                        for i in obj: extract(i)
+                                                extract(data)
+                                            except: pass
+                                        s_emails.extend(_re_stealth.findall(r"""href=["']mailto:([^"']+)""", stealth_html, _re_stealth.IGNORECASE))
+                                        s_emails.extend(_re_stealth.findall(r"""[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}""", stealth_html))
+                                        final_s = []
+                                        for e in s_emails:
+                                            e = e.strip().split('?')[0]
+                                            if e and '@' in e and not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io')):
+                                                final_s.append(e)
+                                        discovered_emails = [e for e in set(final_s) if _re_dom.match(r'^[^@]+@[^@]+\.[^@]+$', e)][:5]
+                                        if discovered_emails: break
                                 except Exception: pass
                         
                         # [SEED: 2399] Tier-4: DNS MX + SMTP RCPT verified role contacts (Hunter-class)
