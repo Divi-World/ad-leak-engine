@@ -21,6 +21,7 @@ from ...shared.schemas import Page
 from ...shared.exceptions import PlatformAmbiguousError
 from ...shared.logging import get_logger
 from ...shared.email_tiering import select_best_email
+from ...shared.email_discovery import discover_emails_from_page, crawl_contact_pages, parse_sitemap_for_contacts
 from ...shared.intent import classify_intent_from_page
 
 router = APIRouter()
@@ -320,8 +321,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                                         discovered_emails = [e for e in set(final_s) if _re_stealth.match(r'^[^@]+@[^@]+\.[^@]+$', e)][:5]
                                         if discovered_emails: break
                                 except Exception: pass
-                        
-                        # [SEED: 2399] Tier-4: DNS MX + SMTP RCPT verified role contacts (Hunter-class)
+
+            # [SEED: 2399] Tier-4: DNS MX + SMTP RCPT verified role contacts (Hunter-class)
                         if not discovered_emails:
                             try:
                                 import dns.resolver, smtplib

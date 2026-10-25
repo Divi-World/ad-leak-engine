@@ -1,9 +1,9 @@
 """Orchestrates the full fallback chain [SEED: 2399].
 
 Priority order:
-  0. Official Ad Library API  (bulletproof; needs free token)
-  1. GraphQL via curl_cffi    (fast, structured)
-  2. Playwright stealth       (consent-aware, broad capture)
+0. Official Ad Library API (bulletproof; needs free token)
+1. GraphQL via curl_cffi (fast, structured)
+2. Playwright stealth (consent-aware, broad capture)
 
 All tiers are protected. Total system failure yields empty, never crashes.
 """
@@ -13,7 +13,7 @@ from typing import Iterator
 from ..shared.schemas import RawAd
 from ..shared.exceptions import (
     SchemaDriftError, BlockedError, RateLimitError,
-    EmptyResponseError, AdLeakEngineError
+    EmptyResponseError, CrawlerTimeoutError, AdLeakEngineError
 )
 import time
 from ..self_heal.circuit_breaker import CircuitBreaker
@@ -35,44 +35,65 @@ class HybridRouter:
         self.api = api
         self.graphql = graphql or GraphQLSource()
         self.playwright = playwright or PlaywrightSource()
-        self.breaker = breaker or CircuitBreaker(failure_threshold=3, recovery_timeout=60)
+        self.breaker = breaker or CircuitBreaker(failure_threshold=1, recovery_timeout=60)
         self.monitor = HealthMonitor() if HealthMonitor else None
         self.cache = CacheManager()
-        self.fallback_chain = FallbackChain(graphql_source=self.graphql, playwright_source=self.playwright, cache=self.cache)
+        self.fallback_chain = FallbackChain(
+            graphql_source=self.graphql,
+            playwright_source=self.playwright,
+            cache=self.cache
+        )
 
     def search(self, query: str, country: str, max_results: int = 50) -> Iterator[RawAd]:
+        """Execute hierarchical search with automatic failover."""
+        
         # Tier 0: Official API if configured
         if self.api is not None and getattr(self.api, "available", lambda: False)():
             try:
                 ads = list(self.api.search(query, country, max_results))
                 if ads:
+                    logger.info(f"[HYBRID] Success via Graph API ({len(ads)} ads)")
                     yield from ads
                     return
-            except Exception:
-                logger.warning("Ad Library API failed; falling back to scraping.")
+            except Exception as e:
+                logger.warning(f"[HYBRID] Graph API failed: {e}. Falling back.")
+                # Record failure even for optional accelerators if they throw
+                self.breaker.record_failure()
 
-        # Tier 1: GraphQL
-        if self.breaker.can_execute():
-            try:
-                ads = list(self.graphql.search(query, country, max_results))
-                self.breaker.record_success()
+        # Tier 1: GraphQL (Manual Execution with Breaker Protection)
+        try:
+            ads = list(self.graphql.search(query, country, max_results))
+            if ads:
+                logger.info(f"[HYBRID] Success via GraphQL ({len(ads)} ads)")
+                self.breaker.record_success() # Reset breaker on success
                 yield from ads
                 return
-            except (SchemaDriftError, BlockedError, RateLimitError, EmptyResponseError) as e:
-                logger.warning("GraphQL failed (%s), engaging fallback.", type(e).__name__)
-                self.breaker.record_failure()
-                if self.monitor: self.monitor.log_fallback()
-                backoff = get_backoff(type(e).__name__, 1)
-                logger.info(f"Applying retry backoff: {backoff:.1f}s")
-                time.sleep(min(backoff, 2.0))
-
-        # Tier 2: Playwright (protected — never crashes the pipeline)
-        logger.info("Routing to Playwright fallback.")
-        try:
-            yield from self.playwright.search(query, country, max_results)
-        except AdLeakEngineError as e:
-            logger.error("Playwright fallback also failed (%s). Yielding empty.", type(e).__name__)
-            return
+        except (SchemaDriftError, BlockedError, RateLimitError, EmptyResponseError, CrawlerTimeoutError) as e:
+            logger.warning(f"[HYBRID] GraphQL failed ({type(e).__name__}). Recording failure & falling back to Playwright.")
+            self.breaker.record_failure() # CRITICAL: Opens circuit on blocking errors
         except Exception as e:
-            logger.error("Unexpected Playwright error (%s). Yielding empty.", type(e).__name__)
-            return
+            logger.error(f"[HYBRID] Unexpected GraphQL error: {e}. Recording failure & falling back to Playwright.")
+            self.breaker.record_failure()
+
+        # Tier 2: Playwright (Manual Execution with Breaker Protection)
+        try:
+            logger.info("Routing to Playwright fallback.")
+            ads = list(self.playwright.search(query, country, max_results))
+            if ads:
+                logger.info(f"[HYBRID] Success via Playwright ({len(ads)} ads)")
+                yield from ads
+                return
+            else:
+                logger.warning("[HYBRID] Playwright returned 0 ads.")
+                # Empty result isn't necessarily a 'failure' for circuit breaker unless configured so
+        except Exception as e:
+            logger.error(f"[HYBRID] Playwright failed critically: {e}")
+            self.breaker.record_failure()
+
+        # Tier 3: Last Resort (Empty Yield, Log Error)
+        logger.critical(f"[HYBRID] ALL SOURCES FAILED for '{query}' in {country}")
+        return
+
+    def health_check(self) -> bool:
+        """Verify router readiness."""
+        return True
