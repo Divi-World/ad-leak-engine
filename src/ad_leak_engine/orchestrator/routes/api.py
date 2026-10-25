@@ -20,6 +20,8 @@ from ...persistence.repository import AdRepository
 from ...shared.schemas import Page
 from ...shared.exceptions import PlatformAmbiguousError
 from ...shared.logging import get_logger
+from ...shared.email_tiering import select_best_email
+from ...shared.intent import classify_intent_from_page
 
 router = APIRouter()
 logger = get_logger()
@@ -431,6 +433,67 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 page.raw = page.raw or {}
                 page.raw["competitor_data"] = competitor_data
             pack = builder.build(page, leaks, fixes, financial_data=financial_data)
+            try:
+                _email_report = select_best_email(discovered_emails)
+                _intent_report = classify_intent_from_page(page)
+
+                try:
+                    _conf_f = float(conf)
+                except Exception:
+                    _conf_f = 0.0
+
+                _routing_note = ""
+                if platform and platform != "custom" and _conf_f < 0.5:
+                    _routing_note = (
+                        f"Platform detected as {platform} with low confidence {_conf_f:.2f}. "
+                        "Fixes were routed conservatively to avoid applying platform-specific code to an uncertain stack."
+                    )
+                elif platform == "custom" and _conf_f >= 0.5:
+                    _routing_note = (
+                        f"Platform classified as custom with confidence {_conf_f:.2f}. "
+                        "Generic GTM/server-side fixes were used."
+                    )
+
+                _appendix = [
+                    "",
+                    "---",
+                    "",
+                    "## Outreach Contact Intelligence",
+                    f"- **Best public contact email:** {_email_report.get('email') or 'Not captured'}",
+                    f"- **Email tier:** {_email_report.get('tier') or 'none'}",
+                    f"- **Email score:** {_email_report.get('score', 0)}",
+                    f"- **Recommended use:** {_email_report.get('recommended_use') or 'none'}",
+                    f"- **Prospect intent:** {_intent_report.get('primary') or 'unknown'}",
+                    "",
+                ]
+
+                if _routing_note:
+                    _appendix.extend([
+                        "## Platform Routing Note",
+                        _routing_note,
+                        "",
+                    ])
+
+                if isinstance(competitor_data, dict) and competitor_data.get("relevance"):
+                    rel = competitor_data.get("relevance") or {}
+                    _appendix.extend([
+                        "## Competitor Relevance Guard",
+                        f"- **Prospect intent used:** {rel.get('prospect_intent') or 'unknown'}",
+                        f"- **Relevant competitors used:** {len(competitor_data.get('competitors', []) or [])}",
+                        f"- **Filtered low-value competitors:** {rel.get('filtered_count', 0)}",
+                    ])
+                    reasons = rel.get("reasons") or []
+                    if reasons:
+                        _appendix.append("- **Filter reasons:**")
+                        for r in reasons[:5]:
+                            _appendix.append(f"  - {r}")
+                    _appendix.append("")
+
+                with open(f"output/{job_id}/{page_id}/teardown.md", "a", encoding="utf-8") as _tf:
+                    _tf.write("\n".join(_appendix))
+            except Exception:
+                pass
+
             if competitor_data:
                 try:
                     teardown_path = f"output/{job_id}/{page_id}/teardown.md"
@@ -483,6 +546,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
 
             _write_status(job_id, {"status": "running", "progress": min(95, 75 + int(20 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: forging {platform} fixes & teardown"})
 
+            _email_report = select_best_email(discovered_emails)
             results.append({
                 "page_id": page_id,
                 "page_name": page_name,
@@ -490,11 +554,16 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int):
                 "confidence": conf,
                 "leak_count": len(leaks),
                 "estimated_recovery": pack.estimated_recovery,
-                    "financial_source": "meta_graph_api" if financial_data else "benchmark_estimated",
+                "financial_source": "meta_graph_api" if financial_data else "benchmark_estimated",
                 "teardown_path": f"output/{job_id}/{page_id}/teardown.md",
                 "evidence_mode": evidence_mode,
                 "platform_evidence": platform_evidence,
                 "discovered_emails": discovered_emails,
+                "contact_email": _email_report.get("email"),
+                "email_tier": _email_report.get("tier"),
+                "email_score": _email_report.get("score"),
+                "email_reason": _email_report.get("reason"),
+                "email_recommended_use": _email_report.get("recommended_use"),
                 "competitor_benchmark": competitor_data is not None
             })
             processed += 1

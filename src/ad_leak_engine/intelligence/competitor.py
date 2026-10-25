@@ -52,11 +52,10 @@ class CompetitorIntelligence:
         return []
 
     def benchmark_from_ads(self, prospect_page_id: str, niche: str, country: str, ads: list) -> dict:
-        # [SEED: 2399] TOP 1 COMPETITOR BENCHMARK:
-        # Compute real evidence from the live Playwright Ad Library pool already
-        # captured by the engine. This avoids tokenless Graph API 401 bottlenecks
-        # and prevents fabricated zero counts.
         from collections import defaultdict
+        from urllib.parse import urlparse
+        from ..shared.intent import classify_intent_from_text
+        from ..shared.competitor_relevance import filter_competitors
 
         pages = defaultdict(lambda: {
             "page_id": "",
@@ -66,6 +65,7 @@ class CompetitorIntelligence:
             "media_types": set(),
             "spend_lower": 0.0,
             "spend_upper": 0.0,
+            "landing_urls": [],
         })
 
         for ad in ads or []:
@@ -86,6 +86,10 @@ class CompetitorIntelligence:
             if media_type:
                 entry["media_types"].add(media_type)
 
+            landing = getattr(ad, "landing_url", None)
+            if landing:
+                entry["landing_urls"].append(landing)
+
             spend = getattr(ad, "spend", None)
             if isinstance(spend, (tuple, list)) and len(spend) == 2:
                 try:
@@ -104,6 +108,7 @@ class CompetitorIntelligence:
                 "media_types": sorted(e["media_types"]),
                 "spend_lower": round(e["spend_lower"], 2),
                 "spend_upper": round(e["spend_upper"], 2),
+                "sample_landing_urls": e["landing_urls"][:3],
             })
 
         prospect = next((s for s in stats if s["page_id"] == prospect_page_id), {
@@ -114,29 +119,44 @@ class CompetitorIntelligence:
             "media_types": [],
             "spend_lower": 0.0,
             "spend_upper": 0.0,
+            "sample_landing_urls": [],
         })
 
-        competitors = sorted(
+        prospect_name = prospect.get("page_name") or ""
+        prospect_url = (prospect.get("sample_landing_urls") or [""])[0]
+        prospect_domain = urlparse(prospect_url).netloc.lower() if prospect_url else ""
+        intent = classify_intent_from_text(f"{prospect_name} {prospect_url} {niche}")
+
+        raw_competitors = sorted(
             [s for s in stats if s["page_id"] != prospect_page_id],
             key=lambda x: x["active_ad_count"],
             reverse=True,
-        )[:3]
+        )[:10]
 
-        valid_counts = [c["active_ad_count"] for c in competitors]
+        kept_competitors, filtered_competitors, relevance_reasons = filter_competitors(
+            prospect_intent=intent,
+            prospect_name=prospect_name,
+            prospect_domain=prospect_domain,
+            competitors=raw_competitors,
+            country=country,
+        )
+
+        kept_competitors = kept_competitors[:3]
+        valid_counts = [c["active_ad_count"] for c in kept_competitors]
         prospect_ads = prospect["active_ad_count"]
 
-        if competitors:
+        if kept_competitors:
             avg_competitor_ads = round(sum(valid_counts) / len(valid_counts), 1)
             gap = round(avg_competitor_ads - prospect_ads, 1)
             status = "observed_pool_benchmark"
         else:
             avg_competitor_ads = None
             gap = None
-            status = "no_competitors_in_observed_pool"
+            status = "no_relevant_competitors_in_observed_pool"
 
         return {
             "prospect": prospect,
-            "competitors": competitors,
+            "competitors": kept_competitors,
             "metrics": {
                 "prospect_ad_count": prospect_ads,
                 "avg_competitor_ads": avg_competitor_ads,
@@ -149,8 +169,17 @@ class CompetitorIntelligence:
             "coverage": {
                 "observed_ads": len(ads or []),
                 "observed_pages": len(stats),
+                "relevant_competitors_used": len(kept_competitors),
+                "filtered_competitors": len(filtered_competitors),
                 "country": country,
                 "niche": niche,
+            },
+            "relevance": {
+                "prospect_intent": intent.get("primary"),
+                "prospect_domain": prospect_domain,
+                "filtered_count": len(filtered_competitors),
+                "filtered_names": [c.get("page_name") for c in filtered_competitors][:10],
+                "reasons": relevance_reasons[:10],
             },
             "source": "meta_ad_library_playwright_observed_pool",
         }

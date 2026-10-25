@@ -33,6 +33,75 @@ except ImportError:
 
 logger = get_logger()
 
+
+def _network_probe_ok() -> bool:
+    """[SEED: 2399] Lightweight connectivity probe."""
+    import httpx
+
+    for probe_url in ("https://1.1.1.1", "https://dns.google", "https://cloudflare.com"):
+        try:
+            httpx.get(probe_url, timeout=5.0, follow_redirects=True)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _wait_for_network(stage: str = "network", max_wait_seconds: int = 3600) -> bool:
+    """[SEED: 2399] Self-healing network pause/resume."""
+    import time
+
+    waited = 0
+
+    if _network_probe_ok():
+        return True
+
+    logger.warning(
+        f"Network drop detected at {stage}. Pausing execution until connectivity restores.",
+        extra={"stage": stage, "action": "network_pause"},
+    )
+
+    while waited < max_wait_seconds:
+        time.sleep(10)
+        waited += 10
+
+        if _network_probe_ok():
+            logger.info(
+                f"Network restored after {waited}s. Resuming elite execution at {stage}.",
+                extra={"stage": stage, "action": "network_resume"},
+            )
+            return True
+
+    logger.error(
+        f"Network did not restore within {max_wait_seconds}s at {stage}.",
+        extra={"stage": stage, "action": "network_timeout"},
+    )
+    return False
+
+
+def _is_network_exception(exc: Exception) -> bool:
+    """[SEED: 2399] Classify transient network failures for retry/pause behavior."""
+    text = f"{type(exc).__name__}: {exc}".lower()
+    needles = (
+        "timeout",
+        "timed out",
+        "connection",
+        "connect",
+        "network",
+        "dns",
+        "resolve",
+        "unreachable",
+        "reset",
+        "aborted",
+        "remote host",
+        "ssl",
+        "tls",
+        "proxy",
+        "websocket",
+        "net::err",
+    )
+    return any(n in text for n in needles)
+
 def _fetch_html_stealth(url: str) -> str | None:
     hb = HumanBrowser(headless=True)
     try:
@@ -42,7 +111,21 @@ def _fetch_html_stealth(url: str) -> str | None:
             hb.human_pause(1.5, 3.0)
             return page.content()
     except Exception as e:
-        logger.warning(f"Stealth fetch timeout/fail: {e}. Trying early-commit...", extra={"stage": "ingest", "action": "fetch_html"})
+        logger.warning(f"Stealth fetch timeout/fail: {e}. Checking network state...", extra={"stage": "ingest", "action": "fetch_html"})
+
+        # [SEED: 2399] SMART NETWORK PAUSE/RESUME: if the internet dropped, wait and retry stealth fetch.
+        if _is_network_exception(e) and _wait_for_network("fetch_html_stealth"):
+            try:
+                with hb.session() as page:
+                    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                    hb.human_pause(1.5, 3.0)
+                    return page.content()
+            except Exception as e_retry:
+                logger.warning(
+                    f"Stealth fetch retry after network restore failed: {e_retry}. Trying early-commit...",
+                    extra={"stage": "ingest", "action": "fetch_html_retry"},
+                )
+
         # [SEED: 2399] Fallback: Grab HTML as soon as network commits
         try:
             with hb.session() as page:
@@ -67,10 +150,11 @@ def _fetch_html_stealth(url: str) -> str | None:
         return None
 
 def _fetch_html_resilient(url: str) -> str | None:
-    """Self-healing HTML acquisition: stealth -> early-commit retry -> plain HTTP."""
+    """Self-healing HTML acquisition: stealth -> early-commit -> HTTP -> Wayback -> network pause."""
     html = _fetch_html_stealth(url)
     if html:
         return html
+
     hb = HumanBrowser(headless=True)
     try:
         with hb.session() as page:
@@ -79,51 +163,53 @@ def _fetch_html_resilient(url: str) -> str | None:
             return page.content()
     except Exception as e:
         logger.error(f"Early-commit fetch failed: {e}", extra={"stage": "ingest", "action": "fetch_html_commit"})
+
     try:
         import httpx
-        resp = httpx.get(url, timeout=20.0, follow_redirects=True, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
-        })
+        resp = httpx.get(
+            url,
+            timeout=20.0,
+            follow_redirects=True,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+            },
+        )
         if resp.status_code == 200 and resp.text:
             return resp.text
     except Exception as e:
         logger.error(f"Plain HTTP fetch failed: {e}", extra={"stage": "ingest", "action": "fetch_html_http"})
-    
-    # [SEED: 2399] WAYBACK MACHINE FALLBACK (Defeats enterprise bot protection)
+
+    # [SEED: 2399] WAYBACK MACHINE FALLBACK (Defeats enterprise bot protection via curl_cffi)
     try:
         from urllib.parse import urlparse
+        from curl_cffi import requests as cffi_requests
+
         domain = urlparse(url).netloc
-        wb_resp = httpx.get(f"http://archive.org/wayback/available?url={domain}", timeout=10.0)
+        wb_resp = cffi_requests.get(
+            f"http://archive.org/wayback/available?url={domain}",
+            impersonate="chrome120",
+            timeout=10.0,
+        )
         if wb_resp.status_code == 200:
             wb_data = wb_resp.json()
             if "archived_snapshots" in wb_data and "closest" in wb_data["archived_snapshots"]:
                 wb_url = wb_data["archived_snapshots"]["closest"].get("url")
                 if wb_url:
-                    wb_html_resp = httpx.get(wb_url, timeout=15.0, follow_redirects=True)
+                    wb_html_resp = cffi_requests.get(wb_url, impersonate="chrome120", timeout=15.0)
                     if wb_html_resp.status_code == 200 and wb_html_resp.text:
-                        logger.info(f"Wayback fetch succeeded for {url}", extra={"stage": "ingest", "action": "fetch_html_wayback"})
+                        logger.info(
+                            f"Wayback fetch succeeded for {url}",
+                            extra={"stage": "ingest", "action": "fetch_html_wayback"},
+                        )
                         return wb_html_resp.text
     except Exception as e:
         logger.error(f"Wayback fetch failed: {e}", extra={"stage": "ingest", "action": "fetch_html_wayback"})
 
     # [SEED: 2399] SMART NETWORK PAUSE/RESUME (Self-Healing)
-    import time as _time_net
-    import httpx as _httpx_net
-    try:
-        _httpx_net.get("https://1.1.1.1", timeout=5.0)
-    except Exception:
-        logger.warning("Global network drop detected. Pausing execution until connection restores...")
-        while True:
-            _time_net.sleep(10)
-            try:
-                _httpx_net.get("https://1.1.1.1", timeout=5.0)
-                logger.info("Network restored. Resuming elite execution.")
-                break
-            except Exception:
-                continue
-        # Retry stealth fetch immediately after network restore
-        return _fetch_html_stealth(url)
-        
+    if not _network_probe_ok():
+        if _wait_for_network("fetch_html_resilient"):
+            return _fetch_html_stealth(url)
+
     return None
 
 def cmd_scan(keyword: str, country: str, limit: int, skip_crawl: bool):

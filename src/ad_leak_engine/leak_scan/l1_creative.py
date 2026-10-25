@@ -120,60 +120,70 @@ def detect_no_retargeting(page) -> bool:
 
 
 def detect_retargeting_gap(page) -> tuple[bool, dict]:
-    """
-    [SEED: 2399] Evidence-based retargeting gap detector.
-
-    This does NOT claim to know private Meta custom audience settings.
-    It only reports whether retargeting/BOFU markers are observable in the
-    sampled public Meta Ad Library pool: landing URLs, UTM parameters,
-    ad headlines, ad bodies, and CTAs.
-    """
+    from ..shared.intent import classify_intent_from_page, expected_events_for_intent
     from urllib.parse import urlparse, parse_qs
 
     ads = getattr(page, "active_ads", []) or []
     if not ads:
         return False, {}
 
+    raw = getattr(page, "raw", None) or {}
+    if not isinstance(raw, dict):
+        raw = {}
+
+    net_log = raw.get("network_log", {}) or {}
+    if not isinstance(net_log, dict):
+        net_log = {}
+
+    intent = classify_intent_from_page(page)
+
     retarget_terms = (
-        "retarget",
-        "remarket",
-        "rt",
-        "cart",
-        "abandon",
-        "view",
-        "video",
-        "purchase",
-        "lead",
-        "warm",
-        "engaged",
-        "visitor",
-        "sequence",
-        "seq",
-        "funnel",
-        "bofu",
-        "mofu",
-        "bottom",
-        "mid",
+        "retarget", "remarket", "rt", "cart", "abandon", "view", "video",
+        "purchase", "lead", "warm", "engaged", "visitor", "sequence", "seq",
+        "funnel", "bofu", "mofu", "bottom", "mid",
     )
 
     prospecting_terms = (
-        "prospect",
-        "prospecting",
-        "cold",
-        "new",
-        "broad",
-        "interest",
-        "lookalike",
-        "lal",
-        "tofu",
-        "top",
-        "acquisition",
-        "general",
+        "prospect", "prospecting", "cold", "new", "broad", "interest",
+        "lookalike", "lal", "tofu", "top", "acquisition", "general",
     )
 
     sampled_urls = []
     retarget_hits = []
     prospecting_hits = []
+    request_urls = []
+
+    for r in (net_log.get("requests", []) or []):
+        if isinstance(r, dict):
+            request_urls.append(str(r.get("url", "")))
+        else:
+            request_urls.append(str(r))
+
+    capi_events = []
+    for e in (net_log.get("capi_events", []) or []):
+        if isinstance(e, dict):
+            capi_events.append(str(e.get("event_name", "")))
+        else:
+            capi_events.append(str(e))
+
+    event_blob = " ".join(capi_events + request_urls).lower()
+
+    def has_event(name: str) -> bool:
+        n = (name or "").lower().replace(" ", "")
+        aliases = {
+            "initiatecheckout": "initiate_checkout",
+            "addtocart": "add_to_cart",
+            "pageview": "page_view",
+            "viewcontent": "view_content",
+        }
+        key = "has_" + aliases.get(n, n)
+        if net_log.get(key, False):
+            return True
+        if n in event_blob:
+            return True
+        if aliases.get(n) and aliases[n] in event_blob:
+            return True
+        return False
 
     for ad in ads[:50]:
         url = getattr(ad, "landing_url", "") or ""
@@ -207,11 +217,17 @@ def detect_retargeting_gap(page) -> tuple[bool, dict]:
             if term in full_blob and term not in prospecting_hits:
                 prospecting_hits.append(term)
 
+    expected = expected_events_for_intent(intent.get("primary"))
+    event_coverage = {ev: has_event(ev) for ev in expected}
+
     evidence = {
         "sampled_active_ads": len(ads),
         "sampled_urls": sampled_urls[:10],
         "retarget_markers_observed": retarget_hits,
         "prospecting_markers_observed": prospecting_hits,
+        "prospect_intent": intent.get("primary"),
+        "expected_events": expected,
+        "event_coverage": event_coverage,
         "interpretation": (
             "No retargeting/BOFU markers were observed in the sampled public "
             "Meta Ad Library pool for this prospect."

@@ -9,9 +9,24 @@ def run_scan_pipeline_task(self, job_id: str, keyword: str, country: str, limit:
         return {"status": "completed", "job_id": job_id}
     except Exception as e:
         import json
+        import traceback
+        from datetime import datetime, timezone
         from pathlib import Path
+
         status_file = Path(f"output/{job_id}/status.json")
         status_file.parent.mkdir(parents=True, exist_ok=True)
+
+        payload = {
+            "status": "error",
+            "job_id": job_id,
+            "message": str(e),
+            "exception_type": type(e).__name__,
+            "stage": "celery_task",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "traceback": traceback.format_exc(),
+        }
+
         with open(status_file, "w", encoding="utf-8") as f:
-            json.dump({"status": "error", "message": str(e)}, f)
-        return {"status": "error", "job_id": job_id, "error": str(e)}
+            json.dump(payload, f)
+
+        raise

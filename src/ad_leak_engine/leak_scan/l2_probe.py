@@ -81,10 +81,18 @@ class L2LiveProbe:
                     on_request(request, requests_log, network_log)
 
                 page.on("request", _on_request)
-                page.goto(url, wait_until="networkidle", timeout=30000)
-                page.wait_for_timeout(3000)
+                # [SEED: 2399] TOP 1 WAF BYPASS: domcontentloaded prevents hanging on enterprise WAF challenge scripts
+                page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                hb.human_pause(2.0, 4.0)
+                page.wait_for_timeout(4000)
 
                 content = page.content()
+                # [SEED: 2399] Enterprise WAF Challenge Detection & Auto-Solve
+                if "challenges.cloudflare.com" in content or "<title>Just a moment..." in content or "cdn-cgi/challenge-platform" in content:
+                    network_log["waf_blocked"] = True
+                    # Wait for Cloudflare Turnstile auto-solve
+                    page.wait_for_timeout(8000)
+                    content = page.content()
                 if "fbevents.js" in content or "fbq(" in content:
                     network_log["pixel_fired"] = True
 
@@ -106,7 +114,34 @@ class L2LiveProbe:
                     if "purchase" in req_url_lower:
                         network_log["has_purchase_event"] = True
 
-        except Exception:
-            pass
+        except Exception as e:
+            # [SEED: 2399] SMART NETWORK PAUSE/RESUME for live telemetry probe.
+            try:
+                from ..cli import _is_network_exception, _wait_for_network
+
+                if (
+                    _is_network_exception(e)
+                    and _wait_for_network("l2_probe")
+                    and not getattr(self, "_ale_probe_retry", False)
+                ):
+                    self._ale_probe_retry = True
+                    try:
+                        return self.probe(url)
+                    finally:
+                        self._ale_probe_retry = False
+            except Exception:
+                pass
+
+            network_log["probe_error"] = str(e)
+
+            try:
+                from ..shared.logging import get_logger
+
+                get_logger().warning(
+                    f"L2 probe failed for {url}: {e}",
+                    extra={"stage": "l2_probe", "action": "probe_failed"},
+                )
+            except Exception:
+                pass
 
         return network_log
