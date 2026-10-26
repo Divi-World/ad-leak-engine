@@ -21,7 +21,8 @@ from ...shared.schemas import Page
 from ...shared.exceptions import PlatformAmbiguousError
 from ...shared.logging import get_logger
 from ...shared.email_tiering import select_best_email
-from ...shared.email_discovery import discover_emails_from_page, crawl_contact_pages, parse_sitemap_for_contacts
+from ...shared.email_discovery import discover_emails_aggressively
+
 from ...shared.intent import classify_intent_from_page
 
 router = APIRouter()
