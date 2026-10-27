@@ -34,6 +34,17 @@ class PlatformDetector(AbstractPlatformDetector):
                 best_platform = platform
                 best_evidence = matched_markers
 
+        # [SEED: 2399] PHASE 5.2: NEXT.JS / VERCEL DETECTION
+        if html:
+            lower_html = html.lower()
+            # Strong indicators of Next.js
+            if "__next_data__" in lower_html or "_next/static" in lower_html:
+                return ("nextjs", 0.95)
+            
+            # Header-based detection hints in HTML
+            if "vercel" in lower_html and "x-vercel-id" in lower_html:
+                 return ("nextjs", 0.90)
+
         return (best_platform, best_confidence, best_evidence)
 
     def _collect_matched_markers(self, markers: list[str], html: str, headers: dict) -> list[str]:

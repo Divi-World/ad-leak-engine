@@ -43,3 +43,80 @@ Add redis and celery to requirements.txt.
 Create src/ad_leak_engine/orchestrator/tasks.py to handle the trigger_scan logic asynchronously.
 Store final job states and file paths (output/{uuid}/teardown.md) in a lightweight SQLite database (via SQLAlchemy) instead of relying solely on the file system.
 Result: The system can now handle 50+ concurrent audits without blocking the API or mixing up job IDs.
+
+
+
+
+
+
+
+PHASE 5: INTELLIGENCE DEPTH & DIRECT AUDIT ENGINE
+Goal: Maximize email capture rate, deepen fix specificity for modern stacks, and enable direct URL/ID auditing.
+5.1 Aggressive Email Discovery Integration
+Objective: Lift Tier 1 email hit rate from ~40% to >80%.
+Action:
+Integrate shared/email_discovery.py (created earlier) fully into orchestrator/routes/api.py.
+Implement Sitemap-Aware Contact Crawler: Fetch /sitemap.xml, parse for /contact, /about, /team, /leadership.
+Implement Deep Page Probing: Stealth-fetch these discovered URLs using existing _fetch_html_resilient / Playwright stack.
+Extract emails via Regex + JSON-LD + Mailto links from all probed pages, not just landing page.
+Feed all candidates into select_best_email() for final scoring.
+5.2 Headless & Enterprise Fix Generators
+Objective: Provide actionable code for Next.js, Vercel, Sitecore, Adobe Experience Manager.
+Action:
+Extend fix_forge/platforms/ with new modules:
+nextjs_headless.py: Generates useEffect hooks or _app.tsx modifications for Meta Pixel initialization on hydration. Includes Server-Side Rendering (SSR) safe patterns.
+sitecore_aem.py: Generates generic GTM container injection snippets suitable for enterprise tag managers used by Sitecore/AEM implementations.
+Update platform_fingerprint/detector.py to recognize Next.js markers (__NEXT_DATA__, vercel.app) and Enterprise CMS headers.
+Route detected platforms to specific fix generators.
+5.3 Direct Audit API Endpoint
+Objective: Allow users to audit any website/page ID instantly without keyword search.
+Action:
+Add new endpoint: POST /api/v1/audit/direct.
+Payload: { "url": "https://example.com", "page_id": "optional_fb_page_id" }.
+Logic:
+If url provided: Skip Ad Library discovery. Go straight to L2/L3 scanning of that URL.
+If page_id provided: Use existing competitor/ad library logic to fetch ads for that specific page, then scan landing pages.
+Merge results into standard OutreachPack format.
+Frontend UI: Add "Direct Audit" tab/input field.
+PHASE 6: VISUAL POLISH & REPORTING SUITE
+Goal: Transform raw data into compelling, sales-ready visual assets.
+6.1 HTML Report Generator
+Objective: Replace Markdown teardowns with styled, interactive HTML reports.
+Action:
+Create Jinja2 template report.html.j2.
+Include CSS framework (Tailwind or Bootstrap) for professional look.
+Visual Elements:
+Severity Heatmap: Color-coded badges (Red/Orange/Yellow/Green).
+Financial Impact Chart: Bar chart comparing "Current Estimated Loss" vs. "Post-Fix Recovery."
+Competitor Benchmark Graph: Radar or bar chart showing prospect vs. top competitors' ad volume/spend (if available).
+Code Snippet Viewer: Syntax-highlighted blocks for fixes (Prism.js or Highlight.js).
+Export functionality: Generate PDF from HTML using WeasyPrint or Playwright PDF rendering.
+6.2 Executive Summary Refinement
+Objective: Make the first 3 seconds count for busy executives.
+Action:
+Enhance message_gen.py to produce a "One-Pager" executive summary at the top of every report.
+Key metrics bolded: Total Leaks Found, Est. Monthly Revenue Loss, Top Priority Fix.
+Tone adjustment: More consultative, less robotic. "Here is exactly where you are bleeding money..."
+PHASE 7: INFRASTRUCTURE, AUTH & BILLING (COMMERCIALIZATION)
+Goal: Deploy as a secure, multi-tenant SaaS product.
+(This is essentially the old Phase 5, moved down)
+7.1 Dockerization & Orchestration
+Containerize Uvicorn, Celery Worker, Redis, Postgres.
+docker-compose.yml for dev/prod parity.
+Environment variable management for secrets.
+7.2 Database Migration (SQLite → PostgreSQL)
+Async SQLAlchemy setup.
+Tenant isolation schema (tenant_id foreign keys everywhere).
+Migration scripts.
+7.3 Authentication & Authorization
+NextAuth/Clerk integration for frontend.
+JWT middleware for backend API protection.
+RBAC: Admin, Agency User, Single Seat User.
+7.4 Billing Integration (Stripe)
+Product tiers: Starter, Pro, Enterprise.
+Credit-based system (1 scan = 1 credit).
+Webhooks for payment success/failure -> update DB quota.
+7.5 Outreach Automation & Domain Setup
+Connect Resend/SendGrid for automated email dispatch.
+Configure SPF/DKIM/DMARC for adleakengine.com.
+Unsubscribe/opt-out compliance handling.

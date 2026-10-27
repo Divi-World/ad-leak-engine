@@ -5,6 +5,7 @@ from .platforms.shopify import ShopifyFixGenerator
 from .platforms.woocommerce import WooCommerceFixGenerator
 from .platforms.bigcommerce import BigCommerceFixGenerator
 from .platforms.custom import CustomFixGenerator
+from .platforms.nextjs_headless import NextJsHeadlessFixGenerator
 
 
 class FixForge:
@@ -14,6 +15,7 @@ class FixForge:
             "woocommerce": WooCommerceFixGenerator(),
             "bigcommerce": BigCommerceFixGenerator(),
             "custom": CustomFixGenerator(),
+            "nextjs": NextJsHeadlessFixGenerator(),
         }
 
     def generate(self, leak: Leak, platform: str, confidence: float) -> Fix:
