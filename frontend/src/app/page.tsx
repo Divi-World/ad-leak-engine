@@ -20,6 +20,9 @@ export default function Home() {
   const [keyword, setKeyword] = useState("");
   const [country, setCountry] = useState("US");
   const [limit, setLimit] = useState(1);
+  const [auditMode, setAuditMode] = useState<"niche" | "direct">("niche");
+  const [directUrl, setDirectUrl] = useState("");
+  const [targetPageId, setTargetPageId] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [scanStatus, setScanStatus] = useState<string>("idle");
@@ -94,7 +97,8 @@ export default function Home() {
   };
 
   const handleScan = async () => {
-    if (!keyword) return;
+    if (auditMode === "niche" && !keyword) return;
+    if (auditMode === "direct" && !directUrl.trim() && !targetPageId.trim()) return;
     setIsScanning(true);
     setScanStatus("scanning");
     setResults([]);
@@ -109,7 +113,17 @@ export default function Home() {
           "Content-Type": "application/json",
           "X-API-Key": process.env.NEXT_PUBLIC_API_KEY || "dev_key_2399"
         },
-        body: JSON.stringify({ keyword, country, limit }),
+        body: JSON.stringify(auditMode === "direct" ? { 
+          direct_url: directUrl || undefined, 
+          page_id: targetPageId || undefined,
+          keyword: "", 
+          country, 
+          limit 
+        } : { 
+          keyword, 
+          country, 
+          limit 
+        }),
       });
       const data = await response.json();
       setJobId(data.job_id);
@@ -279,10 +293,61 @@ export default function Home() {
           <Zap className="w-5 h-5 text-yellow-500" />
           Initiate Deep Audit
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                {/* Phase 5.3: Direct Audit Mode Toggle */}
+        <div className="flex items-center gap-3 mb-4 pb-4 border-b border-zinc-800">
+          <button type="button" onClick={() => setAuditMode("niche")}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+              auditMode === "niche" 
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" 
+                : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
+            }`}>
+            Niche Search
+          </button>
+          <button type="button" onClick={() => setAuditMode("direct")}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+              auditMode === "direct" 
+                ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20" 
+                : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
+            }`}>
+            Direct URL / Page ID
+          </button>
+        </div>
+
+        {auditMode === "direct" && (
+          <div className="mb-6 p-4 bg-zinc-950/50 border border-zinc-800 rounded-xl space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-2">Landing Page URL</label>
+              <input 
+                type="url" 
+                value={directUrl} 
+                onChange={(e) => setDirectUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleScan()}
+                placeholder="https://example.com/product-page"
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              />
+            </div>
+            <div className="relative flex items-center justify-center my-2">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-800"></div></div>
+              <span className="relative bg-zinc-900 px-3 text-xs font-bold text-zinc-500 uppercase tracking-widest">OR</span>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-2">Facebook Page ID</label>
+              <input 
+                type="text" 
+                value={targetPageId} 
+                onChange={(e) => setTargetPageId(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleScan()}
+                placeholder="e.g., 123456789012345"
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              />
+            </div>
+          </div>
+        )}
+
+<div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-zinc-400 mb-2">Target Niche / Keyword</label>
-            <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="e.g., organic skincare" className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+            <input type="text" value={keyword} onKeyDown={(e) => e.key === "Enter" && handleScan()} onChange={(e) => setKeyword(e.target.value)} placeholder="e.g., organic skincare" className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
           </div>
           <div className="relative group" onMouseEnter={() => setCountryOpen(true)} onMouseLeave={() => setCountryOpen(false)}>
             <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Country</label>
@@ -303,7 +368,11 @@ export default function Home() {
             <input type="number" value={limit} onChange={(e) => { const v = parseInt(e.target.value, 10); setLimit(Number.isNaN(v) ? 1 : v); }} min={1} max={5} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
           </div>
         </div>
-        <button onClick={handleScan} disabled={isScanning || !keyword} className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all">
+        <button onClick={handleScan} disabled={
+          isScanning || 
+          (auditMode === "niche" && !keyword.trim()) || 
+          (auditMode === "direct" && !directUrl.trim() && !targetPageId.trim())
+        } className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all">
           {isScanning ? <><Loader2 className="w-5 h-5 animate-spin" /> Deploying Stealth Swarm...</> : <><Search className="w-5 h-5" /> Run Infrastructure Audit</>}
         </button>
       </section>
