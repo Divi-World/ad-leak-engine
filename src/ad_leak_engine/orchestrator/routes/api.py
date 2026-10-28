@@ -220,7 +220,22 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             # Run Scans
             if html:
                 page.raw = {"html": html} # Mock raw for scanners
-                leaks += l2.scan(page) + l3.scan(page)
+                # [SEED: 2399] CROSS-PLATFORM TIMEOUT GUARD (THREADING)
+            import concurrent.futures
+            
+            def _run_scans_safe():
+                return l2.scan(page) + l3.scan(page)
+            
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_run_scans_safe)
+                    # Enforce 20s limit for Direct Mode scans
+                    leaks += future.result(timeout=20)
+            except concurrent.futures.TimeoutError:
+                print(f"[WARN] Scan timeout for {page_name}. Skipping deep telemetry.")
+                # Continue with partial results (L1 only) if needed, or just pass
+            except Exception as e:
+                print(f"[ERROR] Scan failure for {page_name}: {e}")
             
             fixes = []
             for leak in leaks:
