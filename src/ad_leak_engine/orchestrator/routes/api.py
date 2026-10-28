@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from ...ingest.playwright_source import PlaywrightSource
+from ...ingest.hybrid_router import HybridRouter
 from ...leak_scan.l1_creative import L1CreativeScanner
 from ...leak_scan.l2_tracking import L2TrackingScanner
 from ...leak_scan.l3_scanner import L3SiteScanner
@@ -137,6 +138,26 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
     # [SEED: 2399] ELITE DIRECT MODE: BYPASS PLAYWRIGHT/SWARM ENTIRELY
     if direct_url or page_id:
         _write_status(job_id, {"status": "running", "progress": 10, "stage": "Elite Direct Audit Initiated (No Swarm Overhead)"})
+        # [SEED: 2399] BIG BRAND PROTECTION GUARD (DIRECT MODE)
+        BIG_BRAND_DOMAINS = [
+                    "amazon", "alibaba", "walmart", "target.", "ebay.", "etsy.com", "tiktok", "facebook.com", "instagram.com", "youtube.com", 
+                    "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", "homedepot.com", "lowes.com", "olive young", "neutrogena", "reitmans",
+                    "nike.com", "adidas.com", "puma.com", "underarmour.com", "lululemon.com", "apple.com", "samsung.com", "microsoft.com", "bestbuy.com", "costco.com",
+                    "mcdonalds.com", "starbucks.com", "subway.com", "burgerking.com", "wendys.com", "chick-fil-a.com", "tacobell.com", "kfc.com", "dominos.com",
+                    "loreal.com", "esteelauder.com", "clinique.com", "maybelline.com", "covergirl.com", "revlon.com", "glossier.com", "drunkelephant.com", "fentybeauty.com",
+                    "shein.", "temu.", "aliexpress.", "asos.", "zara.", "h&m.com", "uniqlo.", "gap.", "oldnavy.", "victoriassecret.",
+                    "kohls.com", "jcpenney.com", "ikea.com", "staples.com", "officedepot.com", "chewy.com", "petsmart.com", "petco.com", "autozone.com", "cvs.com",
+                    "walgreens.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "citibank.com", "capitalone.com", "verizon.com", "att.com", "t-mobile.com",
+                    "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com", "geico.com", "progressive.com", "allstate.com", "libertymutual.com",
+                    "shopee", "lazada", "mercadolibre", "rakuten", "allegro", "ozon",
+                    "play.google.com", "apps.apple.com", "itunes.apple.com", "microsoft.com/store",
+                    "steampowered.com", "epicgames.com", "roblox.com", "appstore", "google.com/store"
+                ]
+        target_landing_check = direct_url or ""
+        if any(dom in target_landing_check.lower() for dom in BIG_BRAND_DOMAINS):
+            _write_status(job_id, {"status": "error", "message": f"Protected Giant Detected: Skipping audit for {target_landing_check}"})
+            return # EXIT IMMEDIATELY
+
         
         target_pid = page_id or f"direct-{uuid.uuid4().hex[:8]}"
         target_name = "Direct Target"
@@ -220,22 +241,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             # Run Scans
             if html:
                 page.raw = {"html": html} # Mock raw for scanners
-                # [SEED: 2399] CROSS-PLATFORM TIMEOUT GUARD (THREADING)
-            import concurrent.futures
-            
-            def _run_scans_safe():
-                return l2.scan(page) + l3.scan(page)
-            
-            try:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(_run_scans_safe)
-                    # Enforce 20s limit for Direct Mode scans
-                    leaks += future.result(timeout=20)
-            except concurrent.futures.TimeoutError:
-                print(f"[WARN] Scan timeout for {page_name}. Skipping deep telemetry.")
-                # Continue with partial results (L1 only) if needed, or just pass
-            except Exception as e:
-                print(f"[ERROR] Scan failure for {page_name}: {e}")
+                leaks += l2.scan(page) + l3.scan(page)
             
             fixes = []
             for leak in leaks:
@@ -266,7 +272,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
     """Background task executing the proven scan pipeline."""
     init_db()
     repo = AdRepository()
-    source = PlaywrightSource(headless=True)
+    source = HybridRouter(playwright=PlaywrightSource(headless=True))
     
     try:
         # [SEED: 2399] DYNAMIC RAW POOL SCALING (Guarantees Limit Fulfillment)
@@ -612,29 +618,11 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 except Exception:
                     pass
             if page.raw:
-                # [SEED: 2399] STRICT TIMEOUT GUARD FOR DIRECT MODE
-                import signal
-                class TimeoutError(Exception): pass
-                def handler(signum, frame): raise TimeoutError("Scan exceeded budget")
-                
-                is_direct_local = bool(direct_url or page_id)
-                original_handler = None
-                
-                if is_direct_local:
-                    # Set alarm to 20 seconds max for L2/L3 in Direct Mode
-                    signal.signal(signal.SIGALRM, handler)
-                    signal.alarm(20)
-                    original_handler = signal.getsignal(signal.SIGALRM)
-                    
+                # [SEED: 2399] SAFE CROSS-PLATFORM SCAN EXECUTION
                 try:
                     leaks += l2.scan(page) + l3.scan(page)
-                except TimeoutError:
-                    _write_status(job_id, {"status": "running", "progress": min(95, 75 + int(20 * processed / max(limit, 1))), "stage": f"Timeout: Skipping deep telemetry for {page_name}"})
-                finally:
-                    if is_direct_local:
-                        signal.alarm(0) # Cancel alarm
-                        if original_handler:
-                            signal.signal(signal.SIGALRM, original_handler)
+                except Exception as e:
+                    print(f"[WARN] Scan error for {page_name}: {e}")
                     
                     
             fixes = []
