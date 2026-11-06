@@ -32,3 +32,9 @@ Start the Celery Worker (in a NEW terminal):
 
 Start Uvicorn (in your main backend terminal):
     uvicorn src.ad_leak_engine.orchestrator.app:app --reload --port 8000
+
+
+
+cd ~/Documents/Projects/Ad-Leak-Engine
+source .venv/Scripts/activate
+clear

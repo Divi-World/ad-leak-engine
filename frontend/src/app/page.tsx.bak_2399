@@ -20,6 +20,9 @@ export default function Home() {
   const [keyword, setKeyword] = useState("");
   const [country, setCountry] = useState("US");
   const [limit, setLimit] = useState(1);
+  const [auditMode, setAuditMode] = useState<"niche" | "direct">("niche");
+  const [directUrl, setDirectUrl] = useState("");
+  const [targetPageId, setTargetPageId] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [scanStatus, setScanStatus] = useState<string>("idle");
@@ -94,7 +97,8 @@ export default function Home() {
   };
 
   const handleScan = async () => {
-    if (!keyword) return;
+    if (auditMode === "niche" && !keyword) return;
+    if (auditMode === "direct" && !directUrl.trim() && !targetPageId.trim()) return;
     setIsScanning(true);
     setScanStatus("scanning");
     setResults([]);
@@ -109,7 +113,17 @@ export default function Home() {
           "Content-Type": "application/json",
           "X-API-Key": process.env.NEXT_PUBLIC_API_KEY || "dev_key_2399"
         },
-        body: JSON.stringify({ keyword, country, limit }),
+        body: JSON.stringify(auditMode === "direct" ? { 
+          direct_url: directUrl || undefined, 
+          page_id: targetPageId || undefined,
+          keyword: "", 
+          country, 
+          limit 
+        } : { 
+          keyword, 
+          country, 
+          limit 
+        }),
       });
       const data = await response.json();
       setJobId(data.job_id);
@@ -122,29 +136,35 @@ export default function Home() {
 
   useEffect(() => {
     if (!jobId || scanStatus === "completed" || scanStatus === "error") return;
-    const poll = setInterval(async () => {
-      try {
-        const response = await fetch(`${apiUrl}/scan/status/${jobId}`, { headers: { "X-API-Key": process.env.NEXT_PUBLIC_API_KEY || "dev_key_2399" } });
-        const data = await response.json();
-        if (data.status === "completed") {
-          setResults(data.results || []);
-          setScanStatus("completed");
-          setIsScanning(false);
-          clearInterval(poll);
-        } else if (data.status === "error") {
-          setScanStatus("error");
-          setErrorDetail(data.message || "");
-          setIsScanning(false);
-          clearInterval(poll);
-        } else {
-          setProgress(data.progress || 0);
-          setStage(data.stage || "Processing...");
-        }
-      } catch (error) {
-        console.error("Polling failed:", error);
+
+    const eventSource = new EventSource(`${apiUrl}/scan/stream/${jobId}`);
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.status === "completed") {
+        setResults(data.results || []);
+        setScanStatus("completed");
+        setIsScanning(false);
+        eventSource.close();
+      } else if (data.status === "error") {
+        setScanStatus("error");
+        setErrorDetail(data.message || "An error occurred during the scan.");
+        setIsScanning(false);
+        eventSource.close();
+      } else {
+        setProgress(data.progress || 0);
+        setStage(data.stage || "Processing...");
       }
-    }, 3000);
-    return () => clearInterval(poll);
+    };
+
+    eventSource.onerror = (error) => {
+      console.error("SSE Error:", error);
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [jobId, scanStatus, apiUrl]);
 
   const toggleExpand = async (res: ScanResult) => {
@@ -273,10 +293,63 @@ export default function Home() {
           <Zap className="w-5 h-5 text-yellow-500" />
           Initiate Deep Audit
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                {/* Phase 5.3: Direct Audit Mode Toggle */}
+        <div className="flex items-center gap-3 mb-4 pb-4 border-b border-zinc-800">
+          <button type="button" onClick={() => setAuditMode("niche")}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+              auditMode === "niche" 
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" 
+                : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
+            }`}>
+            Niche Search
+          </button>
+          <button type="button" onClick={() => setAuditMode("direct")}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+              auditMode === "direct" 
+                ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20" 
+                : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"
+            }`}>
+            Direct URL / Page ID
+          </button>
+        </div>
+
+        {auditMode === "direct" && (
+          <div className="mb-6 p-4 bg-zinc-950/50 border border-zinc-800 rounded-xl space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-2">Landing Page URL</label>
+              <input 
+                type="url" 
+                value={directUrl} 
+                onChange={(e) => setDirectUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleScan()}
+                placeholder="https://example.com/product-page"
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              />
+            </div>
+            <div className="relative flex items-center justify-center my-2">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-800"></div></div>
+              <span className="relative bg-zinc-900 px-3 text-xs font-bold text-zinc-500 uppercase tracking-widest">OR</span>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-2">Facebook Page ID</label>
+              <input 
+                type="text" 
+                value={targetPageId} 
+                onChange={(e) => setTargetPageId(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleScan()}
+                placeholder="e.g., 123456789012345"
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+              />
+            </div>
+          </div>
+        )}
+
+        {auditMode === "niche" && (
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-zinc-400 mb-2">Target Niche / Keyword</label>
-            <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="e.g., organic skincare" className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+            <input type="text" value={keyword} onKeyDown={(e) => e.key === "Enter" && handleScan()} onChange={(e) => setKeyword(e.target.value)} placeholder="e.g., organic skincare" className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
           </div>
           <div className="relative group" onMouseEnter={() => setCountryOpen(true)} onMouseLeave={() => setCountryOpen(false)}>
             <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Country</label>
@@ -297,10 +370,79 @@ export default function Home() {
             <input type="number" value={limit} onChange={(e) => { const v = parseInt(e.target.value, 10); setLimit(Number.isNaN(v) ? 1 : v); }} min={1} max={5} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
           </div>
         </div>
-        <button onClick={handleScan} disabled={isScanning || !keyword} className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all">
+        )}
+        <button onClick={handleScan} disabled={
+          isScanning || 
+          (auditMode === "niche" && !keyword.trim()) || 
+          (auditMode === "direct" && !directUrl.trim() && !targetPageId.trim())
+        } className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all">
           {isScanning ? <><Loader2 className="w-5 h-5 animate-spin" /> Deploying Stealth Swarm...</> : <><Search className="w-5 h-5" /> Run Infrastructure Audit</>}
         </button>
       </section>
+
+
+      {/* PREMIUM RESOURCE GUARD ALERT - POSITIONED FOR MAXIMUM VISIBILITY */}
+      {scanStatus === "error" && (
+        <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+          {errorDetail?.includes("[RESOURCE OPTIMIZATION]") ? (
+            /* Strategic Guard: Amber/Gold Theme for Intelligence */
+            <div className="relative overflow-hidden rounded-xl border border-amber-500/30 bg-gradient-to-br from-zinc-900 via-zinc-900 to-amber-950/20 p-6 shadow-[0_0_20px_rgba(245,158,11,0.1)] backdrop-blur-sm">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-500/50 to-transparent"></div>
+              
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20 shrink-0">
+                  <ShieldCheck className="w-6 h-6 text-amber-400" />
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold text-amber-100 tracking-tight mb-1">
+                    Resource Optimization Protocol Active
+                  </h3>
+                  <p className="text-sm text-zinc-300 leading-relaxed mb-3 opacity-90">
+                    {errorDetail.replace("[RESOURCE OPTIMIZATION] ", "")}
+                  </p>
+                  
+                  <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-amber-500/10">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                      Compute Saved
+                    </span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
+                      SMB Focus Preserved
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Critical Error: Red/Dark Theme for Failures */
+            <div className="relative overflow-hidden rounded-xl border border-red-500/30 bg-gradient-to-br from-zinc-900 via-zinc-900 to-red-950/20 p-6 shadow-[0_0_20px_rgba(239,68,68,0.1)] backdrop-blur-sm">
+               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500/50 to-transparent"></div>
+               
+               <div className="flex items-start gap-4">
+                 <div className="p-3 bg-red-500/10 rounded-lg border border-red-500/20 shrink-0">
+                   <AlertTriangle className="w-6 h-6 text-red-400" />
+                 </div>
+                 
+                 <div className="flex-1 min-w-0">
+                   <h3 className="text-lg font-semibold text-red-100 tracking-tight mb-1">
+                     Audit Failed
+                   </h3>
+                   <p className="text-sm text-zinc-300 leading-relaxed mb-3 opacity-90">
+                     {errorDetail || "An unexpected error occurred during the scan."}
+                   </p>
+                   
+                   <div className="mt-4 pt-3 border-t border-red-500/10">
+                     <p className="text-xs text-zinc-500">
+                       Tip: Ensure the niche has active Meta ads in the selected country. Try broader keywords or different regions.
+                     </p>
+                   </div>
+                 </div>
+               </div>
+             </div>
+          )}
+        </div>
+      )}
+
 
       {scanStatus === "scanning" && (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-8 text-center">
@@ -420,9 +562,46 @@ export default function Home() {
       )}
 
       {scanStatus === "error" && (
-        <div className="bg-red-900/20 border border-red-800 rounded-xl p-6 text-center">
-          <p className="text-red-400 font-semibold">{errorDetail ? `Scan ended: ${errorDetail}.` : "Scan failed. Please check backend logs or try a different keyword."}</p>
-          <p className="text-zinc-400 text-sm mt-2">Tip: the niche must have active Meta ads in the selected country. Try a broader keyword or another country code.</p>
+        <div className={`rounded-xl p-6 text-center border transition-all duration-300 ${
+          errorDetail?.includes("[RESOURCE OPTIMIZATION]") 
+            ? "bg-amber-900/20 border-amber-700/50 shadow-lg shadow-amber-900/10" // Amber for Strategic Guard
+            : "bg-red-900/20 border-red-800"                                     // Red for Actual Errors
+        }`}>
+          
+          {/* Icon Indicator */}
+          <div className="flex justify-center mb-3">
+            {errorDetail?.includes("[RESOURCE OPTIMIZATION]") ? (
+              <AlertTriangle className="w-8 h-8 text-amber-500" />
+            ) : (
+              <ShieldCheck className="w-8 h-8 text-red-500 rotate-180" />
+            )}
+          </div>
+
+          {/* Main Message */}
+          <p className={`font-semibold text-lg mb-2 ${
+            errorDetail?.includes("[RESOURCE OPTIMIZATION]") 
+              ? "text-amber-200" 
+              : "text-red-300"
+          }`}>
+            {errorDetail || "Scan failed. Please check backend logs."}
+          </p>
+
+          {/* Contextual Advice */}
+          {!errorDetail?.includes("[RESOURCE OPTIMIZATION]") && (
+            <p className="text-zinc-400 text-sm mt-3 max-w-md mx-auto">
+              Tip: The niche must have active Meta ads in the selected country. Try a broader keyword or another region code.
+            </p>
+          )}
+
+          {errorDetail?.includes("[RESOURCE OPTIMIZATION]") && (
+            <div className="mt-4 pt-4 border-t border-amber-800/30">
+              <p className="text-amber-300/80 text-xs font-medium uppercase tracking-wider mb-1">System Status</p>
+              <p className="text-zinc-300 text-sm">
+                Compute resources preserved for high-intent SMB targets. 
+                <span className="block mt-1 text-amber-400 font-semibold">Recommendation:</span> Pivot to mid-market competitors or specialist agencies.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

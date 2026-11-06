@@ -2,10 +2,10 @@
 from .celery_app import app
 
 @app.task(bind=True, name="ad_leak_engine.run_scan_pipeline")
-def run_scan_pipeline_task(self, job_id: str, keyword: str, country: str, limit: int):
+def run_scan_pipeline_task(self, job_id: str, keyword: str, country: str, limit: int, direct_url: str | None = None, page_id: str | None = None):
     from .routes.api import run_scan_pipeline
     try:
-        run_scan_pipeline(job_id, keyword, country, limit)
+        run_scan_pipeline(job_id, keyword, country, limit, direct_url, page_id)
         return {"status": "completed", "job_id": job_id}
     except Exception as e:
         import json
