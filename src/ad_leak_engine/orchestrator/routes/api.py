@@ -76,23 +76,23 @@ _EXPANSION_MAP = {
 # Defined at Module Level to prevent UnboundLocalError in Branch 2.
 # These entities are excluded due to dedicated in-house agencies (Zero ROI for SMB audit).
 BIG_BRAND_BLACKLIST = [
-    "amazon", "alibaba", "walmart", "target.", "ebay.", "etsy.com", 
+    "amazon", "alibaba", "walmart", "target.", "ebay.", "etsy.com",
     "tiktok", "facebook.com", "instagram.com", "youtube.com",
-    "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", 
+    "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com",
     "homedepot.com", "lowes.com", "olive young", "neutrogena", "reitmans",
-    "nike.com", "adidas.com", "puma.com", "underarmour.com", "lululemon.com", 
+    "nike.com", "adidas.com", "puma.com", "underarmour.com", "lululemon.com",
     "apple.com", "samsung.com", "microsoft.com", "bestbuy.com", "costco.com",
-    "mcdonalds.com", "starbucks.com", "subway.com", "burgerking.com", "wendys.com", 
+    "mcdonalds.com", "starbucks.com", "subway.com", "burgerking.com", "wendys.com",
     "chick-fil-a.com", "tacobell.com", "kfc.com", "dominos.com",
-    "loreal.com", "esteelauder.com", "clinique.com", "maybelline.com", "covergirl.com", 
+    "loreal.com", "esteelauder.com", "clinique.com", "maybelline.com", "covergirl.com",
     "revlon.com", "glossier.com", "drunkelephant.com", "fentybeauty.com",
-    "shein.", "temu.", "aliexpress.", "asos.", "zara.", "h&m.com", "uniqlo.", 
+    "shein.", "temu.", "aliexpress.", "asos.", "zara.", "h&m.com", "uniqlo.",
     "gap.", "oldnavy.", "victoriassecret.",
-    "kohls.com", "jcpenney.com", "ikea.com", "staples.com", "officedepot.com", 
+    "kohls.com", "jcpenney.com", "ikea.com", "staples.com", "officedepot.com",
     "chewy.com", "petsmart.com", "petco.com", "autozone.com", "cvs.com",
-    "walgreens.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "citibank.com", 
+    "walgreens.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "citibank.com",
     "capitalone.com", "verizon.com", "att.com", "t-mobile.com",
-    "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com", 
+    "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com",
     "geico.com", "progressive.com", "allstate.com", "libertymutual.com",
     "shopee", "lazada", "mercadolibre", "rakuten", "allegro", "ozon",
     "play.google.com", "apps.apple.com", "itunes.apple.com", "microsoft.com/store",
@@ -226,54 +226,151 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             target_name = "Direct Target"
             target_landing = direct_url or ""
 
+            # --- ROBUST URL NORMALIZATION & EXTRACTION ---
             if page_id and not direct_url:
                  target_name = f"Page_{page_id}"
             elif direct_url:
                  from urllib.parse import urlparse
-                 # [SEED: 2399] ROBUST DOMAIN EXTRACTION
-                 # Handles missing schemes (http://), trailing slashes, and whitespace.
-                 clean_url = direct_url.strip()
                  
-                 # Force add https:// if no scheme is present to ensure urlparse works
-                 if not clean_url.startswith(('http://', 'https://')):
-                     clean_url = 'https://' + clean_url
-                 
-                 parsed = urlparse(clean_url)
-                 
-                 # Extract domain, stripping 'www.' for cleaner display
-                 raw_domain = parsed.netloc.lower()
-                 if raw_domain.startswith('www.'):
-                     raw_domain = raw_domain[4:]
-                 
-                 # Fallback to the cleaned URL path if netloc is still somehow empty
-                 target_name = raw_domain or clean_url.replace('https://', '').replace('http://', '')[:50]
+                 # 1. Clean Input
+                 raw_input = direct_url.strip()
+                 if not raw_input:
+                     _fail_job(job_id, Exception("Empty URL provided"), stage="input_validation")
+                     raise Exception("Empty URL provided")
 
-            # [SEED: 2399] INTELLIGENT RESOURCE ALLOCATION GUARD (EXACT MESSAGE SPEC)
-            # Detect Big Brands and fail gracefully using standard error protocol.
-            # Uses Global BIG_BRAND_BLACKLIST defined at module level.
-            
+                 # 2. Force Protocol
+                 if not raw_input.startswith(('http://', 'https://')):
+                     raw_input = 'https://' + raw_input
+                 
+                 # 3. Assign Normalized Landing URL
+                 target_landing = raw_input
+
+                 # 4. Extract Domain for Name
+                 try:
+                     parsed = urlparse(target_landing)
+                     hostname = parsed.hostname
+                     if hostname:
+                         # Strip www. for cleaner display
+                         target_name = hostname.replace('www.', '')
+                     else:
+                         # Fallback if parsing fails completely
+                         target_name = target_landing.replace('https://', '').replace('http://', '')[:50]
+                 except Exception:
+                     target_name = target_landing[:50]
+
+            # --- BIG BRAND GUARD ---
             if target_landing:
                 domain_lower = target_landing.lower()
                 is_big_brand = any(wg in domain_lower for wg in BIG_BRAND_BLACKLIST)
-                
+
                 if is_big_brand:
-                    # EXACT MESSAGE AS REQUESTED BY USER
                     msg = (
-                        f"[RESOURCE OPTIMIZATION] '{target_name}' is a large enterprise with in-house marketing and existing agencies. "
-                        "Scan is feasible, but outreach ROI is low, so compute is redirected. "
-                        "RECOMMENDATION: pivot to mid-market competitors or specialist agencies."
+                        f"[RESOURCE OPTIMIZATION] '{target_name}' is a large enterprise with in-house marketing. "
+                        "Scan aborted to save compute. Pivot to mid-market competitors."
                     )
-                    
-                    # Use standard _fail_job to ensure frontend handles it as "error" status
-                    # This prevents SSE crashes and displays the message clearly.
                     _fail_job(job_id, Exception(msg), stage="guard")
-                    return # Exit cleanly, saving compute
+                    raise Exception(msg)
 
             if not target_landing:
                  _fail_job(job_id, Exception("No valid landing URL provided for Direct Mode"), stage="input_validation")
-                 return
+                 raise Exception("No valid landing URL provided for Direct Mode")
 
-            # Construct Minimal Synthetic Ad
+            # --- DNS-FIRST EXISTENCE VALIDATION WITH RETRY ---
+            url_valid = False
+            last_error = None
+            
+            try:
+                from urllib.parse import urlparse
+                import socket
+                import time
+
+                parsed_target = urlparse(target_landing)
+                hostname = parsed_target.hostname
+                
+                if not hostname:
+                    raise ValueError("Invalid URL structure: No hostname found")
+
+                # Attempt DNS Resolution up to 3 times with short delays
+                for attempt in range(3):
+                    try:
+                        socket.getaddrinfo(hostname, None, family=0, type=0, proto=0, flags=0)
+                        url_valid = True
+                        break
+                    except socket.gaierror as e:
+                        last_error = e
+                        if attempt < 2:
+                            time.sleep(0.5) # Brief wait before retry
+                        continue
+                    except Exception as e:
+                        last_error = e
+                        break # Non-DNS error, stop retrying
+
+            except Exception as e:
+                last_error = e
+                url_valid = False
+
+            if not url_valid:
+                err_msg = f"Target '{target_name}' could not be resolved. Error: {last_error}"
+                logger.warning(err_msg)
+                _fail_job(job_id, Exception(err_msg), stage="validation")
+                raise Exception(err_msg) 
+
+            # [SEED: 2399] MEANINGFUL CONTENT GATE (NEW)
+            # Verifies that the domain serves actual content, not just a parked page or error.
+            try:
+                from curl_cffi import requests as cffi_requests
+                import re as _re_gate
+                
+                # Quick probe with strict timeout
+                resp_probe = cffi_requests.get(target_landing, impersonate="chrome120", timeout=5, allow_redirects=True)
+                
+                # 1. Status Code Check
+                if resp_probe.status_code != 200:
+                     raise Exception(f"HTTP {resp_probe.status_code} - Site unreachable or error.")
+                
+                body_text = resp_probe.text
+                body_preview = body_text[:2000].lower()
+                
+                # 2. Parking Lot / Placeholder Detection
+                junk_markers = [
+                    "domain is parked", 
+                    "this domain is reserved", 
+                    "under construction", 
+                    "coming soon",
+                    "godaddy.com/domainsearch/find",
+                    "sedoparking.com",
+                    "buy-this-domain.com",
+                    "hostinger.com",
+                    "bluehost.com",
+                    "register your domain",
+                    "purchase this domain",
+                    "expired domain",
+                    "for sale"
+                ]
+                
+                if any(marker in body_preview for marker in junk_markers):
+                    raise Exception("Domain appears to be parked, expired, or for sale.")
+                    
+                # 3. Minimum Content Length Check (Reject tiny/empty pages)
+                if len(body_text) < 500:
+                    raise Exception("Page content too sparse to audit (<500 chars).")
+
+                # 4. Title/Meta Check for Generic Placeholders
+                title_match = _re_gate.search(r'<title>(.*?)</title>', body_text, _re_gate.IGNORECASE | _re_gate.DOTALL)
+                if title_match:
+                    title_val = title_match.group(1).strip().lower()
+                    generic_titles = ["home", "index", "welcome", "untitled document", "new page"]
+                    if title_val in generic_titles:
+                         # Allow if body is substantial, but warn
+                         pass 
+
+            except Exception as e:
+                err_msg = f"Target '{target_name}' failed Content Gate: {str(e)}"
+                logger.warning(err_msg)
+                _fail_job(job_id, Exception(err_msg), stage="content_gate")
+                raise Exception(err_msg)
+
+            # --- CONSTRUCT SYNTHETIC AD ---
             from ...shared.schemas import RawAd
             fake_ad = RawAd(
                 id=f"direct-{uuid.uuid4().hex[:8]}",
@@ -288,9 +385,9 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             )
 
             by_page = {target_pid: [fake_ad]}
-            ads = [fake_ad] # For context in competitor analysis if needed later
+            ads = [fake_ad]
 
-            # Enter Processing Loop Directly
+            # --- PROCESSING LOOP ---
             for page_id_iter, page_ads in by_page.items():
                 if processed >= limit: break
 
@@ -305,7 +402,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 html = None
                 discovered_emails = []
 
-                # Fast Fetch HTML for Fingerprinting & Email Discovery
+                # Fast Fetch HTML
                 if landing and landing.startswith(("http://", "https://")):
                     try:
                         from curl_cffi import requests as cffi_requests
@@ -323,53 +420,125 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                             else:
                                 if "Shopify.theme" in html: platform, conf = "shopify", 0.95
 
-                            # Extract Emails Quickly
+                            # Extract Emails
                             import re as _re
                             raw_emails = _re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
                             discovered_emails = list(set([e for e in raw_emails if not e.endswith(('.png','.jpg','.js','.css'))]))[:3]
 
-                    except Exception: pass
+                    except Exception as e:
+                        logger.debug(f"Fetch failed for {landing}: {e}")
 
                 _write_status(job_id, {"status": "running", "progress": 58, "stage": f"Auditing {page_name}: Platform {platform}"})
 
-                # [SEED: 2399] CROSS-PLATFORM TIMEOUT GUARD (Replaces SIGALRM)
-                if page.raw or html:
-                     # Ensure page.raw exists for scanners if not already populated by previous steps
-                     if not hasattr(page, 'raw') or not page.raw:
-                         page.raw = {"html": html} if html else {}
+                # [SEED: 2399] DYNAMIC TELEMETRY COLLECTION (PARITY WITH NICHE MODE)
+                # We must capture real network/browser data for L2/L3 scanners to work effectively.
 
-                     is_direct_local = bool(direct_url or page_id)
+                os.makedirs("output/_evidence", exist_ok=True)
+                snapshot_path = f"output/_evidence/{page_id_iter}.json"
+                evidence_mode = "live"
+                use_snapshot = False
 
-                     def perform_deep_scan():
-                         return l2.scan(page) + l3.scan(page)
+                # 1. Check for Cached Evidence (Optimization)
+                if os.path.exists(snapshot_path):
+                    import time as _time
+                    if _time.time() - os.path.getmtime(snapshot_path) < 86400:  # 24h cache
+                        try:
+                            with open(snapshot_path, "r", encoding="utf-8") as sf:
+                                page.raw = json.load(sf)
+                            use_snapshot = True
+                            evidence_mode = "snapshot"
+                            logger.info(f"Using cached telemetry for {target_name}")
+                        except Exception:
+                            pass
 
-                     try:
-                         if is_direct_local:
-                             # Execute in a separate thread with a hard 20s timeout
-                             import concurrent.futures
-                             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                                 future = executor.submit(perform_deep_scan)
-                                 try:
-                                     leaks += future.result(timeout=20)
-                                 except concurrent.futures.TimeoutError:
-                                     future.cancel()
-                                     _write_status(job_id, {
-                                         "status": "running",
-                                         "progress": min(95, 75 + int(20 * processed / max(limit, 1))),
-                                         "stage": f"Timeout: Skipping deep telemetry for {page_name}"
-                                     })
-                         else:
-                             leaks += perform_deep_scan()
-                     except Exception as e:
-                         logger.error(f"Deep scan error for {page_name}: {e}")
+                # 2. Collect Live Telemetry if No Cache
+                if not use_snapshot and landing and landing.startswith(("http://", "https://")):
+                    try:
+                        from ...leak_scan.telemetry_collector import TelemetryCollector
 
+                        _write_status(job_id, {"status": "running", "progress": 65, "stage": f"Auditing {page_name}: Capturing Dynamic Telemetry..."})
+
+                        collector = TelemetryCollector()
+                        live_raw = collector.collect(landing)
+
+                        # Merge with any static HTML we already fetched (optional, but good for context)
+                        if html:
+                            live_raw["html"] = html
+
+                        page.raw = live_raw
+
+                        # Persist to Disk for Audit Trail & Future Runs
+                        with open(snapshot_path, "w", encoding="utf-8") as sf:
+                            json.dump(live_raw, sf, default=str)
+
+                        logger.info(f"Live telemetry captured for {target_name}")
+
+                    except Exception as e:
+                        logger.error(f"Telemetry collection failed for {target_name}: {e}")
+                        # Fallback: Ensure page.raw exists so scanners don't crash, even if empty
+                        if not hasattr(page, 'raw') or not page.raw:
+                            page.raw = {"html": html} if html else {}
+
+                # 3. Execute Deep Scans (L2/L3) with Timeout Protection
+                # Now page.raw contains REAL network data, so L2/L3 will find specific leaks.
+
+                def perform_deep_scan():
+                    return l2.scan(page) + l3.scan(page)
+
+                try:
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(perform_deep_scan)
+                        try:
+                            # Increased timeout to 30s to accommodate browser launch + network wait
+                            leaks += future.result(timeout=30)
+                        except concurrent.futures.TimeoutError:
+                            future.cancel()
+                            _write_status(job_id, {
+                                "status": "running",
+                                "progress": min(95, 75 + int(20 * processed / max(limit, 1))),
+                                "stage": f"Timeout: Skipping deep telemetry for {page_name}"
+                            })
+                except Exception as e:
+                    logger.error(f"Deep scan error for {page_name}: {e}")
+
+                # --- SAFE FIX GENERATION ---
                 fixes = []
+                
+                # Determine Context Keywords Safely
+                _ctx_keywords = []
+                if keyword and keyword.strip():
+                    _ctx_keywords = [keyword.strip()]
+                else:
+                    # Split domain into words: "promixnutrition.com" -> ["promix", "nutrition"]
+                    domain_parts = target_name.split('.')
+                    # Filter out TLDs and common noise
+                    clean_parts = [p for p in domain_parts if len(p) > 2 and p not in ['com', 'net', 'org', 'io', 'co']]
+                    _ctx_keywords = clean_parts if clean_parts else [target_name]
+
                 for leak in leaks:
                     try:
-                        fixes.append(forge.generate(leak, 'custom' if getattr(leak, 'tier', '') == 'L1' else platform, 0.30 if getattr(leak, 'tier', '') == 'L1' else conf))
+                        # Route to Custom for L1 to allow vertical strategy injection
+                        _plat_for_gen = 'custom' if getattr(leak, 'tier', '') == 'L1' else platform
+                        _conf_for_gen = 0.30 if getattr(leak, 'tier', '') == 'L1' else conf
+                        
+                        fix_obj = forge.generate(
+                            leak,
+                            _plat_for_gen,
+                            _conf_for_gen,
+                            context_keywords=_ctx_keywords
+                        )
+                        fixes.append(fix_obj)
+                        
                     except PlatformAmbiguousError:
-                        fixes.append(forge.generate(leak, "custom", conf))
-                    except Exception: pass
+                        # Fallback to custom if platform confidence was too low
+                        try:
+                            fixes.append(forge.generate(leak, "custom", 0.30, context_keywords=_ctx_keywords))
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        logger.error(f"Fix generation failed for leak {leak.id}: {e}")
+                        pass
 
                 pack = builder.build(page, leaks, fixes)
 
@@ -429,7 +598,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 continue
 
             # Re-use Global Blacklist for consistency (FIX: No longer local scope)
-            walled_gardens = BIG_BRAND_BLACKLIST 
+            walled_gardens = BIG_BRAND_BLACKLIST
 
             if not landing or any(wg in landing.lower() for wg in walled_gardens):
                 continue
@@ -441,11 +610,11 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
 
             # [SEED: 2399] MASTER UNIVERSAL SEMANTIC GUARD (Using Global Expanded Map)
             # No need to redefine _EXPANSION_MAP here; it's now global.
-            
+
             _k_words = [w for w in keyword.lower().split() if len(w) > 2]
             _signals = list(_k_words)
             _k_clean = keyword.lower().strip()
-            
+
             # Check exact match first
             if _k_clean in _EXPANSION_MAP:
                 _signals.extend(_EXPANSION_MAP[_k_clean])
@@ -454,7 +623,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 for key, vals in _EXPANSION_MAP.items():
                     if key in _k_clean or _k_clean in key:
                         _signals.extend(vals)
-            
+
             # Deduplicate signals
             _signals = list(set(_signals))
 
@@ -687,7 +856,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             fixes = []
             for leak in leaks:
                 try:
-                    fixes.append(forge.generate(leak, 'custom' if getattr(leak, 'tier', '') == 'L1' else platform, 0.30 if getattr(leak, 'tier', '') == 'L1' else conf))
+                    fixes.append(forge.generate(leak, 'custom' if getattr(leak, 'tier', '') == 'L1' else platform, 0.30 if getattr(leak, 'tier', '') == 'L1' else conf, context_keywords=[keyword]))
                 except PlatformAmbiguousError:
                     fixes.append(forge.generate(leak, "custom", conf))
                 except Exception:

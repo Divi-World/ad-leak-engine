@@ -1,0 +1,34 @@
+{% if vertical %}
+## Strategic Recommendation: {{ title_map.get(leak_signal, 'General Advice') }}
+
+**Context:** Detected Business Vertical: **{{ vertical|replace('_',' ')|title }}**
+
+{% if leak_signal == 'no_video_creative' %}
+### Recommended Video Concept for {{ vertical|replace('_',' ')|title }}
+- **Hook (0-3s):** {% if vertical == 'healthcare_clinic' %}Close-up of patient relief/testimonial. Text: 'Finally, Pain-Free.'{% elif vertical == 'real_estate' %}Drone shot of neighborhood lifestyle. Text: 'Your Dream Home Awaits.'{% elif vertical == 'finance_services' %}Visual of security/shield. Text: 'Protect Your Future.'{% else %}Strong visual benefit related to {{ vertical }}.{% endif %}
+- **Body (3-10s):** {% if vertical == 'healthcare_clinic' %}Show facility cleanliness and doctor empathy.{% elif vertical == 'ecommerce_retail' %}Unboxing or usage demonstration.{% else %}Highlight key differentiator for {{ vertical }}.{% endif %}
+- **CTA (10-15s):** {% if vertical == 'education_school' %}'Apply Now for Fall Term'{% elif vertical == 'home_improvement' %}'Get Free Estimate'{% else %}'Learn More / Shop Now'{% endif %}
+{% endif %}
+
+{% if leak_signal == 'missing_cta' %}
+### High-Converting CTA Framework for {{ vertical|replace('_',' ')|title }}
+- **Avoid:** Generic buttons like 'Submit'.
+- **Use:** Action-oriented verbs specific to intent.
+  - {% if vertical == 'legal_professional' %}'Schedule Confidential Consult'{% endif %}
+  - {% if vertical == 'finance_services' %}'Check My Rate'{% endif %}
+  - {% if vertical == 'healthcare_clinic' %}'Book Appointment'{% endif %}
+  - {% if vertical == 'real_estate' %}'View Listings'{% endif %}
+- **Placement:** Ensure visibility above the fold on mobile.
+{% endif %}
+
+{% if leak_signal == 'no_ab_variation' %}
+### AB Testing Protocol for {{ vertical|replace('_',' ')|title }}
+- **Variant A (Emotional/Benefit):** Focus on outcome/transformation.
+- **Variant B (Rational/Fact):** Focus on credentials/pricing/specs.
+- **Metric:** Track {% if vertical == 'ecommerce_retail' %}'Purchase'{% elif vertical == 'healthcare_clinic' %}'Lead Form Submit'{% else %}'Conversion Event'{% endif %}.
+{% endif %}
+
+{% else %}
+## General Strategic Advice
+No specific vertical detected. Apply general best practices for ad creative optimization.
+{% endif %}
