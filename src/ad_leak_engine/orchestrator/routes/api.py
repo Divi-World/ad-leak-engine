@@ -48,6 +48,32 @@ _EXPANSION_MAP = {
     "woodworking": ["carpentry", "timber", "lumber", "craftsman", "custom furniture", "woodcraft"],
     "studio": ["photography", "portrait", "creative", "design", "agency"],
 
+    # --- [SEED: 2399] MISSING CONSUMER VERTICALS (ADDED) ---
+    "home": ["home decor", "home improvement", "furniture", "interior design", "homeware",
+             "home goods", "furnishings", "home accessories", "kitchenware", "bedding"],
+    "fashion": ["clothing", "apparel", "boutique", "streetwear", "luxury fashion", "accessories",
+                "shoes", "handbags", "jewelry", "watches", "sunglasses"],
+    "beauty": ["makeup", "cosmetics", "lipstick", "foundation", "beauty salon", "nail salon",
+               "hair salon", "beauty supply", "fragrance", "perfume"],
+    "pets": ["pet supplies", "pet food", "dog training", "veterinary", "pet grooming",
+             "pet insurance", "cat litter", "dog toys", "pet adoption"],
+    "gaming": ["video games", "esports", "gaming pc", "console", "game server", "mobile game",
+               "gaming chair", "streaming", "gaming mouse", "gaming keyboard"],
+    "crypto": ["bitcoin", "ethereum", "blockchain", "web3", "crypto exchange", "nft", "defi", "wallet"],
+    "gambling": ["casino", "sportsbook", "betting", "poker", "lottery", "online casino", "slots"],
+    "dating": ["dating app", "singles", "matchmaking", "hookup", "relationship", "dating site"],
+    "wedding": ["wedding planning", "bridal", "wedding dress", "wedding venue",
+                "wedding photographer", "engagement ring", "wedding invitation"],
+    "baby": ["baby products", "stroller", "diapers", "maternity", "parenting", "toddler",
+             "nursery", "baby food", "baby monitor"],
+    "sports": ["sports equipment", "athletic wear", "team sports", "sports betting",
+               "sports nutrition", "sports memorabilia", "sports apparel"],
+    "food": ["food delivery", "meal kit", "grocery", "snack", "coffee", "tea",
+             "supplement drink", "wine", "spirits", "bakery"],
+    "electronics": ["smartphone", "laptop", "headphones", "smartwatch", "tv", "camera",
+                    "drone", "gadget", "tablet", "speaker"],
+    "nonprofit": ["charity", "donation", "fundraising", "ngo", "foundation", "volunteer", "social cause"],
+
     # --- Institutional & High-Value Verticals (NEW) ---
     "hospital": ["hospital marketing", "patient acquisition", "health system advertising", "telehealth",
                  "urgent care", "specialty clinic", "medical group", "hospital recruitment"],
@@ -65,7 +91,7 @@ _EXPANSION_MAP = {
     # --- Other High-Spend Verticals (NEW) ---
     "finance": ["bank", "insurance", "fintech", "accounting", "tax prep", "wealth management", "lending"],
     "legal": ["law firm", "attorney", "personal injury", "immigration lawyer", "family law", "estate planning"],
-    "automotive": ["car dealership", "auto repair", "car rental", "ev charging", "auto insurance"],
+    "automotive": ["car dealership", "auto repair", "car rental", "ev charging", "auto insurance", "car"],
     "travel": ["hotel", "resort", "airline", "travel agency", "vacation rental", "tour operator"],
     "restaurant": ["restaurant", "cafe", "catering", "food delivery", "bakery", "bar"],
     "home_services": ["plumbing", "roofing", "hvac", "landscaping", "cleaning service", "pest control"],
@@ -608,23 +634,21 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
                 continue
 
-            # [SEED: 2399] MASTER UNIVERSAL SEMANTIC GUARD (Using Global Expanded Map)
-            # No need to redefine _EXPANSION_MAP here; it's now global.
-
+            # [SEED: 2399] STRICT SEMANTIC GUARD (FIXED)
+            # Prevents false positives like "Furniture Store" appearing in "Skincare" searches.
+            
             _k_words = [w for w in keyword.lower().split() if len(w) > 2]
             _signals = list(_k_words)
             _k_clean = keyword.lower().strip()
 
-            # Check exact match first
+            # Expand signals using Global Map
             if _k_clean in _EXPANSION_MAP:
                 _signals.extend(_EXPANSION_MAP[_k_clean])
             else:
-                # Fuzzy match for compound keywords (e.g., "mental health hospital")
                 for key, vals in _EXPANSION_MAP.items():
                     if key in _k_clean or _k_clean in key:
                         _signals.extend(vals)
-
-            # Deduplicate signals
+            
             _signals = list(set(_signals))
 
             _digital_negatives = ["app", "apk", "download", "play store", "mod", "hack", "cheat", "free download", "install now", "camera app"]
@@ -634,17 +658,27 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             for ad in page_ads:
                 _ad_corpus += f" {ad.body or ''} {ad.title or ''}"
 
+            # 1. Hard Block Digital/App Entities
             if not _neg_in_keyword and any(neg in _ad_corpus for neg in _digital_negatives):
                 _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Digital/App Entity)"})
                 continue
 
-            _intent_markers = ["shop", "store", "buy", "cart", "checkout", "shipping", "boutique", "services", "agency", "clinic", "studio"]
-            _ecom_intent = any(w in _ad_corpus for w in _intent_markers)
+            # 2. STRICT RELEVANCE CHECK
             _semantic_overlap = any(sig in _ad_corpus for sig in _signals)
-
-            if not _semantic_overlap and not _ecom_intent:
-                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Zero semantic overlap with '{keyword}')"})
-                continue
+            
+            # Define specific category markers that override generic "shop" intent
+            # If the user searched for "skincare", only allow pages mentioning skincare/beauty terms.
+            # Generic "shop/store" is NO LONGER sufficient alone.
+            
+            if not _semantic_overlap:
+                # Allow ONLY if the page name/title explicitly matches the core keyword tokens
+                # e.g., Keyword "skincare" -> Page Name must contain "skin" or "care"
+                _core_tokens = [t for t in _k_words if len(t) > 3] # Use significant words only
+                _name_match = any(t in page_name.lower() for t in _core_tokens)
+                
+                if not _name_match:
+                     _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Low Relevance: No Semantic Match)"})
+                     continue
 
 
             page = Page(id=page_id, name=page_name, url=landing, ads=page_ads, first_seen=datetime.now(timezone.utc))
