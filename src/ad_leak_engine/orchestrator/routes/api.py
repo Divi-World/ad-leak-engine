@@ -230,8 +230,23 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                  target_name = f"Page_{page_id}"
             elif direct_url:
                  from urllib.parse import urlparse
-                 parsed = urlparse(direct_url)
-                 target_name = parsed.netloc or "Unknown Domain"
+                 # [SEED: 2399] ROBUST DOMAIN EXTRACTION
+                 # Handles missing schemes (http://), trailing slashes, and whitespace.
+                 clean_url = direct_url.strip()
+                 
+                 # Force add https:// if no scheme is present to ensure urlparse works
+                 if not clean_url.startswith(('http://', 'https://')):
+                     clean_url = 'https://' + clean_url
+                 
+                 parsed = urlparse(clean_url)
+                 
+                 # Extract domain, stripping 'www.' for cleaner display
+                 raw_domain = parsed.netloc.lower()
+                 if raw_domain.startswith('www.'):
+                     raw_domain = raw_domain[4:]
+                 
+                 # Fallback to the cleaned URL path if netloc is still somehow empty
+                 target_name = raw_domain or clean_url.replace('https://', '').replace('http://', '')[:50]
 
             # [SEED: 2399] INTELLIGENT RESOURCE ALLOCATION GUARD (EXACT MESSAGE SPEC)
             # Detect Big Brands and fail gracefully using standard error protocol.
