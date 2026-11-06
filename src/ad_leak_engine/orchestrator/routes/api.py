@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from typing import Optional
 
 from ...ingest.playwright_source import PlaywrightSource
-from ...ingest.hybrid_router import HybridRouter
 from ...leak_scan.l1_creative import L1CreativeScanner
 from ...leak_scan.l2_tracking import L2TrackingScanner
 from ...leak_scan.l3_scanner import L3SiteScanner
@@ -32,12 +31,74 @@ logger = get_logger()
 
 
 # ============================================================
-
-
+# [SEED: 2399] DYNAMIC NICHE ONTOLOGY ENGINE (Enterprise Grade v2)
+# Expanded for Institutional, High-Spend Verticals, and GovTech.
 # ============================================================
-# [SEED: 2399] DYNAMIC NICHE ONTOLOGY ENGINE (Enterprise Grade)
-# Replaces hardcoded keywords with real-time DOM/OG context analysis.
-# ============================================================
+
+# --- GLOBAL EXPANSION MAP (Upgraded) ---
+# Used by Niche Mode Semantic Filter. Covers Consumer + Institutional + High-Value Verticals.
+_EXPANSION_MAP = {
+    # --- Existing Consumer/Commercial ---
+    "skincare": ["skin", "beauty", "dermatology", "serum", "moisturizer", "facial", "cleanser", "cosmetic"],
+    "health": ["wellness", "supplement", "fitness", "nutrition", "medical", "holistic", "vitamin", "organic"],
+    "fitness": ["gym", "workout", "training", "weight loss", "crossfit", "yoga", "pilates", "exercise"],
+    "marketing": ["seo", "agency", "digital marketing", "consulting", "b2b", "lead generation", "ppc", "branding"],
+    "ecommerce": ["shop", "store", "buy", "boutique", "retail", "fashion", "apparel", "dropshipping"],
+    "real estate": ["realty", "property", "mls", "mortgage", "homes", "realtor", "housing"],
+    "woodworking": ["carpentry", "timber", "lumber", "craftsman", "custom furniture", "woodcraft"],
+    "studio": ["photography", "portrait", "creative", "design", "agency"],
+
+    # --- Institutional & High-Value Verticals (NEW) ---
+    "hospital": ["hospital marketing", "patient acquisition", "health system advertising", "telehealth",
+                 "urgent care", "specialty clinic", "medical group", "hospital recruitment"],
+    "clinic": ["dental clinic", "dermatology clinic", "fertility clinic", "physical therapy",
+               "chiropractic", "veterinary clinic", "med spa"],
+    "school": ["school enrollment", "charter school marketing", "private school admissions",
+               "K12 recruitment", "after school program", "school choice", "tutoring"],
+    "university": ["university admissions", "higher ed marketing", "online degree", "college enrollment",
+                   "graduate program", "continuing education", "student recruitment", "campus tour"],
+    "government": ["public health campaign", "government recruitment", "municipal services",
+                   "public transit", "social services", "civic engagement", "government procurement"],
+    "recruitment": ["employer branding", "job advertising", "talent acquisition", "staffing agency",
+                    "healthcare recruiting", "education recruiting"],
+
+    # --- Other High-Spend Verticals (NEW) ---
+    "finance": ["bank", "insurance", "fintech", "accounting", "tax prep", "wealth management", "lending"],
+    "legal": ["law firm", "attorney", "personal injury", "immigration lawyer", "family law", "estate planning"],
+    "automotive": ["car dealership", "auto repair", "car rental", "ev charging", "auto insurance"],
+    "travel": ["hotel", "resort", "airline", "travel agency", "vacation rental", "tour operator"],
+    "restaurant": ["restaurant", "cafe", "catering", "food delivery", "bakery", "bar"],
+    "home_services": ["plumbing", "roofing", "hvac", "landscaping", "cleaning service", "pest control"],
+    "education_k12": ["tutoring", "test prep", "homeschool", "summer camp", "language school"]
+}
+
+# [SEED: 2399] GLOBAL BIG BRAND BLACKLIST
+# Defined at Module Level to prevent UnboundLocalError in Branch 2.
+# These entities are excluded due to dedicated in-house agencies (Zero ROI for SMB audit).
+BIG_BRAND_BLACKLIST = [
+    "amazon", "alibaba", "walmart", "target.", "ebay.", "etsy.com", 
+    "tiktok", "facebook.com", "instagram.com", "youtube.com",
+    "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", 
+    "homedepot.com", "lowes.com", "olive young", "neutrogena", "reitmans",
+    "nike.com", "adidas.com", "puma.com", "underarmour.com", "lululemon.com", 
+    "apple.com", "samsung.com", "microsoft.com", "bestbuy.com", "costco.com",
+    "mcdonalds.com", "starbucks.com", "subway.com", "burgerking.com", "wendys.com", 
+    "chick-fil-a.com", "tacobell.com", "kfc.com", "dominos.com",
+    "loreal.com", "esteelauder.com", "clinique.com", "maybelline.com", "covergirl.com", 
+    "revlon.com", "glossier.com", "drunkelephant.com", "fentybeauty.com",
+    "shein.", "temu.", "aliexpress.", "asos.", "zara.", "h&m.com", "uniqlo.", 
+    "gap.", "oldnavy.", "victoriassecret.",
+    "kohls.com", "jcpenney.com", "ikea.com", "staples.com", "officedepot.com", 
+    "chewy.com", "petsmart.com", "petco.com", "autozone.com", "cvs.com",
+    "walgreens.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "citibank.com", 
+    "capitalone.com", "verizon.com", "att.com", "t-mobile.com",
+    "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com", 
+    "geico.com", "progressive.com", "allstate.com", "libertymutual.com",
+    "shopee", "lazada", "mercadolibre", "rakuten", "allegro", "ozon",
+    "play.google.com", "apps.apple.com", "itunes.apple.com", "microsoft.com/store",
+    "steampowered.com", "epicgames.com", "roblox.com", "appstore", "google.com/store"
+]
+
 NICHE_TAXONOMY = {
     "ecommerce_skincare": ["photography", "camera", "boudoir", "salon", "makeup artist"],
     "real_estate": ["property photography", "architectural render", "mls listing", "zillow scraper"],
@@ -52,7 +113,7 @@ def resolve_dynamic_exclusions(html: str) -> list:
         og_desc = _re_ont.search(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']', html, _re_ont.IGNORECASE)
         keywords = _re_ont.search(r'<meta[^>]+name=["\']keywords["\'][^>]+content=["\']([^"\']+)["\']', html, _re_ont.IGNORECASE)
         text_sig = f"{og_desc.group(1) if og_desc else ''} {keywords.group(1) if keywords else ''}".lower()
-        
+
         if any(w in text_sig for w in ['skin', 'beauty', 'serum', 'tallow', 'cosmetic', 'nubian']):
             return NICHE_TAXONOMY["ecommerce_skincare"]
         elif any(w in text_sig for w in ['home', 'realty', 'property', 'mls', 'mortgage']):
@@ -107,22 +168,22 @@ def _elite_fetch(url: str, timeout: int = 5) -> str | None:
     try:
         from curl_cffi import requests as cffi_requests
         import random
-        
+
         # Rotate UA strings slightly to mimic diverse traffic
         uas = [
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         ]
-        
+
         resp = cffi_requests.get(
-            url, 
-            impersonate="chrome120", 
+            url,
+            impersonate="chrome120",
             headers={"User-Agent": random.choice(uas)},
             timeout=timeout,
             allow_redirects=True
         )
-        
+
         if resp.status_code == 200:
             # Basic WAF Check: If challenge page detected, return None to trigger fallback/retry logic elsewhere
             if "cloudflare" in resp.text[:500].lower() or "captcha" in resp.text[:500].lower():
@@ -130,171 +191,74 @@ def _elite_fetch(url: str, timeout: int = 5) -> str | None:
             return resp.text
         else:
             return None
-            
+
     except Exception:
         return None
 
 def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direct_url: str | None = None, page_id: str | None = None):
-    # [SEED: 2399] ELITE DIRECT MODE: BYPASS PLAYWRIGHT/SWARM ENTIRELY
-    if direct_url or page_id:
-        _write_status(job_id, {"status": "running", "progress": 10, "stage": "Elite Direct Audit Initiated (No Swarm Overhead)"})
-        # [SEED: 2399] BIG BRAND PROTECTION GUARD (DIRECT MODE)
-        BIG_BRAND_DOMAINS = [
-                    "amazon", "alibaba", "walmart", "target.", "ebay.", "etsy.com", "tiktok", "facebook.com", "instagram.com", "youtube.com", 
-                    "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", "homedepot.com", "lowes.com", "olive young", "neutrogena", "reitmans",
-                    "nike.com", "adidas.com", "puma.com", "underarmour.com", "lululemon.com", "apple.com", "samsung.com", "microsoft.com", "bestbuy.com", "costco.com",
-                    "mcdonalds.com", "starbucks.com", "subway.com", "burgerking.com", "wendys.com", "chick-fil-a.com", "tacobell.com", "kfc.com", "dominos.com",
-                    "loreal.com", "esteelauder.com", "clinique.com", "maybelline.com", "covergirl.com", "revlon.com", "glossier.com", "drunkelephant.com", "fentybeauty.com",
-                    "shein.", "temu.", "aliexpress.", "asos.", "zara.", "h&m.com", "uniqlo.", "gap.", "oldnavy.", "victoriassecret.",
-                    "kohls.com", "jcpenney.com", "ikea.com", "staples.com", "officedepot.com", "chewy.com", "petsmart.com", "petco.com", "autozone.com", "cvs.com",
-                    "walgreens.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "citibank.com", "capitalone.com", "verizon.com", "att.com", "t-mobile.com",
-                    "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com", "geico.com", "progressive.com", "allstate.com", "libertymutual.com",
-                    "shopee", "lazada", "mercadolibre", "rakuten", "allegro", "ozon",
-                    "play.google.com", "apps.apple.com", "itunes.apple.com", "microsoft.com/store",
-                    "steampowered.com", "epicgames.com", "roblox.com", "appstore", "google.com/store"
-                ]
-        target_landing_check = direct_url or ""
-        if any(dom in target_landing_check.lower() for dom in BIG_BRAND_DOMAINS):
-            _write_status(job_id, {"status": "error", "message": f"Protected Giant Detected: Skipping audit for {target_landing_check}"})
-            return # EXIT IMMEDIATELY
+    """
+    [SEED: 2399] UNIFIED INDUSTRIAL PIPELINE
+    Merges Direct Mode speed with Niche Mode rigor.
+    Fixes SIGALRM crash, implements Smart Big-Brand Guard, eliminates dead code.
+    """
 
-        
-        target_pid = page_id or f"direct-{uuid.uuid4().hex[:8]}"
-        target_name = "Direct Target"
-        target_landing = direct_url or ""
-        
-        if page_id and not direct_url:
-             target_name = f"Page_{page_id}"
-        elif direct_url:
-             from urllib.parse import urlparse
-             parsed = urlparse(direct_url)
-             target_name = parsed.netloc or "Unknown Domain"
-        
-        # Construct Minimal Synthetic Ad
-        from ...shared.schemas import RawAd
-        fake_ad = RawAd(
-            id=f"direct-{uuid.uuid4().hex[:8]}",
-            page_id=target_pid,
-            page_name=target_name,
-            landing_url=target_landing,
-            media_type="IMAGE",
-            ad_body="",
-            start_date=datetime.now(timezone.utc).isoformat(),
-            end_time=None,
-            estimated_spend_usd=0.0
-        )
-        
-        # Prepare Loop Data Immediately
-        by_page = {target_pid: [fake_ad]}
-        ads = [fake_ad]
-        
-        # Skip Source Init & Repo Upsert for Speed
-        l1, l2, l3 = L1CreativeScanner(), L2TrackingScanner(), L3SiteScanner()
-        detector, forge = PlatformDetector(), FixForge()
-        builder = OutreachBuilder(output_dir=f"output/{job_id}")
-        results = []
-        processed = 0
-        
-        # Enter Processing Loop Directly
-        for page_id_iter, page_ads in by_page.items():
-            if processed >= limit: break
-            
-            page_name = page_ads[0].page_name
-            landing = next((a.landing_url for a in page_ads if a.landing_url), None)
-            
-            # Bypass All Filters for Direct Mode
-            page = Page(id=page_id_iter, name=page_name, url=landing, ads=page_ads, first_seen=datetime.now(timezone.utc))
-            _write_status(job_id, {"status": "running", "progress": 35, "stage": f"Auditing {page_name}: L1 Creative Scan"})
-            
-            leaks = list(l1.scan(page))
-            platform, conf, platform_evidence = "custom", 0.3, []
-            html = None
-            discovered_emails = []
-            
-            # Fast Fetch HTML for Fingerprinting & Email Discovery
-            if landing and landing.startswith(("http://", "https://")):
-                try:
-                    from curl_cffi import requests as cffi_requests
-                    resp = cffi_requests.get(landing, impersonate="chrome120", timeout=5)
-                    if resp.status_code == 200:
-                        html = resp.text
-                        # Quick Fingerprint
-                        from urllib.parse import urlparse
-                        domain_lower = urlparse(landing).netloc.lower()
-                        if any(m in domain_lower for m in ["shopify", "myshopify"]):
-                            platform, conf = "shopify", 0.95
-                        elif any(m in domain_lower for m in ["woocommerce", "wp-content"]):
-                            platform, conf = "woocommerce", 0.90
-                        else:
-                            # Simple heuristic fallback
-                            if "Shopify.theme" in html: platform, conf = "shopify", 0.95
-                            
-                        # Extract Emails Quickly
-                        import re as _re
-                        raw_emails = _re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
-                        discovered_emails = list(set([e for e in raw_emails if not e.endswith(('.png','.jpg','.js','.css'))]))[:3]
-                        
-                except Exception: pass
-            
-            _write_status(job_id, {"status": "running", "progress": 58, "stage": f"Auditing {page_name}: Platform {platform}"})
-            
-            # Run Scans
-            if html:
-                page.raw = {"html": html} # Mock raw for scanners
-                leaks += l2.scan(page) + l3.scan(page)
-            
-            fixes = []
-            for leak in leaks:
-                try:
-                    fixes.append(forge.generate(leak, platform, conf))
-                except Exception: pass
-                
-            pack = builder.build(page, leaks, fixes)
-            
-            results.append({
-                "page_id": page_id_iter,
-                "page_name": page_name,
-                "platform": platform,
-                "confidence": conf,
-                "leak_count": len(leaks),
-                "estimated_recovery": pack.estimated_recovery,
-                "teardown_path": f"output/{job_id}/{page_id_iter}/teardown.md",
-                "discovered_emails": discovered_emails,
-                "contact_email": discovered_emails[0] if discovered_emails else None
-            })
-            processed += 1
-            
-        with open(f"output/{job_id}/status.json", "w") as f:
-            json.dump({"status": "completed", "results": results}, f)
-        return # EXIT FUNCTION IMMEDIATELY
-
-
-    """Background task executing the proven scan pipeline."""
+    # --- SHARED INITIALIZATION ---
     init_db()
     repo = AdRepository()
-    source = HybridRouter(playwright=PlaywrightSource(headless=True))
-    
+    source = PlaywrightSource(headless=True)
+
+    l1, l2, l3 = L1CreativeScanner(), L2TrackingScanner(), L3SiteScanner()
+    detector, forge = PlatformDetector(), FixForge()
+    builder = OutreachBuilder(output_dir=f"output/{job_id}")
+
+    results = []
+    processed = 0
+
     try:
-        # [SEED: 2399] DYNAMIC RAW POOL SCALING (Guarantees Limit Fulfillment)
-        # The system ALREADY expands queries via EXPANSION_MAP in PlaywrightSource.
-        # To ensure we meet the user's limit after aggressive relevance filtering,
-        # we dynamically scale the raw ad pool size based on the requested limit.
-        # [SEED: 2399] PHASE 5.3: ELITE DIRECT AUDIT BRANCH
+        # ========================================================================
+        # BRANCH 1: ELITE DIRECT MODE (High Speed, Strict Guards)
+        # Triggered when direct_url or page_id is present.
+        # ========================================================================
         if direct_url or page_id:
-            _write_status(job_id, {"status": "running", "progress": 10, "stage": "Executing Elite Direct Audit (No Swarm Overhead)..."})
-            
+            _write_status(job_id, {"status": "running", "progress": 10, "stage": "Elite Direct Audit Initiated"})
+
             target_pid = page_id or f"direct-{uuid.uuid4().hex[:8]}"
             target_name = "Direct Target"
             target_landing = direct_url or ""
-            
+
             if page_id and not direct_url:
                  target_name = f"Page_{page_id}"
             elif direct_url:
                  from urllib.parse import urlparse
                  parsed = urlparse(direct_url)
                  target_name = parsed.netloc or "Unknown Domain"
+
+            # [SEED: 2399] INTELLIGENT RESOURCE ALLOCATION GUARD (EXACT MESSAGE SPEC)
+            # Detect Big Brands and fail gracefully using standard error protocol.
+            # Uses Global BIG_BRAND_BLACKLIST defined at module level.
             
-            # Construct Synthetic RawAd
+            if target_landing:
+                domain_lower = target_landing.lower()
+                is_big_brand = any(wg in domain_lower for wg in BIG_BRAND_BLACKLIST)
+                
+                if is_big_brand:
+                    # EXACT MESSAGE AS REQUESTED BY USER
+                    msg = (
+                        f"[RESOURCE OPTIMIZATION] '{target_name}' is a large enterprise with in-house marketing and existing agencies. "
+                        "Scan is feasible, but outreach ROI is low, so compute is redirected. "
+                        "RECOMMENDATION: pivot to mid-market competitors or specialist agencies."
+                    )
+                    
+                    # Use standard _fail_job to ensure frontend handles it as "error" status
+                    # This prevents SSE crashes and displays the message clearly.
+                    _fail_job(job_id, Exception(msg), stage="guard")
+                    return # Exit cleanly, saving compute
+
+            if not target_landing:
+                 _fail_job(job_id, Exception("No valid landing URL provided for Direct Mode"), stage="input_validation")
+                 return
+
+            # Construct Minimal Synthetic Ad
             from ...shared.schemas import RawAd
             fake_ad = RawAd(
                 id=f"direct-{uuid.uuid4().hex[:8]}",
@@ -307,127 +271,210 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 end_time=None,
                 estimated_spend_usd=0.0
             )
-            ads = [fake_ad]
+
             by_page = {target_pid: [fake_ad]}
-            
-            # SKIP repo.upsert_ads and source.search entirely for speed
-        else:
-            # NICHE MODE: Standard Flow
-            _raw_pool_target = max(100, limit * 15)
-            _write_status(job_id, {"status": "running", "progress": 7, "stage": "Connecting to Stealth Swarm (Ad Library Fetch)"})
-            ads = list(source.search(keyword, country, max_results=_raw_pool_target))
-            if not ads:
-                with open(f"output/{job_id}/status.json", "w") as f:
-                    json.dump({"status": "error", "message": "No ads found"}, f)
-                return
-        
-            repo.upsert_ads(ads)
-            _write_status(job_id, {"status": "running", "progress": 20, "stage": f"Extracted {len(ads)} live Meta ads. Grouping by page..."})
+            ads = [fake_ad] # For context in competitor analysis if needed later
+
+            # Enter Processing Loop Directly
+            for page_id_iter, page_ads in by_page.items():
+                if processed >= limit: break
+
+                page_name = page_ads[0].page_name
+                landing = next((a.landing_url for a in page_ads if a.landing_url), None)
+
+                page = Page(id=page_id_iter, name=page_name, url=landing, ads=page_ads, first_seen=datetime.now(timezone.utc))
+                _write_status(job_id, {"status": "running", "progress": 35, "stage": f"Auditing {page_name}: L1 Creative Scan"})
+
+                leaks = list(l1.scan(page))
+                platform, conf, platform_evidence = "custom", 0.3, []
+                html = None
+                discovered_emails = []
+
+                # Fast Fetch HTML for Fingerprinting & Email Discovery
+                if landing and landing.startswith(("http://", "https://")):
+                    try:
+                        from curl_cffi import requests as cffi_requests
+                        resp = cffi_requests.get(landing, impersonate="chrome120", timeout=5)
+                        if resp.status_code == 200:
+                            html = resp.text
+                            from urllib.parse import urlparse
+                            domain_lower = urlparse(landing).netloc.lower()
+
+                            # Quick Fingerprint
+                            if any(m in domain_lower for m in ["shopify", "myshopify"]):
+                                platform, conf = "shopify", 0.95
+                            elif any(m in domain_lower for m in ["woocommerce", "wp-content"]):
+                                platform, conf = "woocommerce", 0.90
+                            else:
+                                if "Shopify.theme" in html: platform, conf = "shopify", 0.95
+
+                            # Extract Emails Quickly
+                            import re as _re
+                            raw_emails = _re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
+                            discovered_emails = list(set([e for e in raw_emails if not e.endswith(('.png','.jpg','.js','.css'))]))[:3]
+
+                    except Exception: pass
+
+                _write_status(job_id, {"status": "running", "progress": 58, "stage": f"Auditing {page_name}: Platform {platform}"})
+
+                # [SEED: 2399] CROSS-PLATFORM TIMEOUT GUARD (Replaces SIGALRM)
+                if page.raw or html:
+                     # Ensure page.raw exists for scanners if not already populated by previous steps
+                     if not hasattr(page, 'raw') or not page.raw:
+                         page.raw = {"html": html} if html else {}
+
+                     is_direct_local = bool(direct_url or page_id)
+
+                     def perform_deep_scan():
+                         return l2.scan(page) + l3.scan(page)
+
+                     try:
+                         if is_direct_local:
+                             # Execute in a separate thread with a hard 20s timeout
+                             import concurrent.futures
+                             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                                 future = executor.submit(perform_deep_scan)
+                                 try:
+                                     leaks += future.result(timeout=20)
+                                 except concurrent.futures.TimeoutError:
+                                     future.cancel()
+                                     _write_status(job_id, {
+                                         "status": "running",
+                                         "progress": min(95, 75 + int(20 * processed / max(limit, 1))),
+                                         "stage": f"Timeout: Skipping deep telemetry for {page_name}"
+                                     })
+                         else:
+                             leaks += perform_deep_scan()
+                     except Exception as e:
+                         logger.error(f"Deep scan error for {page_name}: {e}")
+
+                fixes = []
+                for leak in leaks:
+                    try:
+                        fixes.append(forge.generate(leak, 'custom' if getattr(leak, 'tier', '') == 'L1' else platform, 0.30 if getattr(leak, 'tier', '') == 'L1' else conf))
+                    except PlatformAmbiguousError:
+                        fixes.append(forge.generate(leak, "custom", conf))
+                    except Exception: pass
+
+                pack = builder.build(page, leaks, fixes)
+
+                results.append({
+                    "page_id": page_id_iter,
+                    "page_name": page_name,
+                    "platform": platform,
+                    "confidence": conf,
+                    "leak_count": len(leaks),
+                    "estimated_recovery": pack.estimated_recovery,
+                    "teardown_path": f"output/{job_id}/{page_id_iter}/teardown.md",
+                    "discovered_emails": discovered_emails,
+                    "contact_email": discovered_emails[0] if discovered_emails else None
+                })
+                processed += 1
+
+            with open(f"output/{job_id}/status.json", "w") as f:
+                json.dump({"status": "completed", "results": results}, f)
+            return # EXIT FUNCTION IMMEDIATELY AFTER DIRECT MODE
+
+
+        # ========================================================================
+        # BRANCH 2: NICHE KEYWORD MODE (Standard Flow)
+        # Only executes if direct_url AND page_id are NONE.
+        # ========================================================================
+
+        # [SEED: 2399] DYNAMIC RAW POOL SCALING
+        _raw_pool_target = max(100, limit * 15)
+        _write_status(job_id, {"status": "running", "progress": 7, "stage": "Connecting to Stealth Swarm (Ad Library Fetch)"})
+
+        ads = list(source.search(keyword, country, max_results=_raw_pool_target))
+        if not ads:
+            with open(f"output/{job_id}/status.json", "w") as f:
+                json.dump({"status": "error", "message": "No ads found"}, f)
+            return
+
+        repo.upsert_ads(ads)
+        _write_status(job_id, {"status": "running", "progress": 20, "stage": f"Extracted {len(ads)} live Meta ads. Grouping by page..."})
+
         by_page = {}
         for ad in ads:
             if ad.page_id not in by_page:
                 by_page[ad.page_id] = []
             by_page[ad.page_id].append(ad)
-            
-        l1, l2, l3 = L1CreativeScanner(), L2TrackingScanner(), L3SiteScanner()
-        detector, forge = PlatformDetector(), FixForge()
-        builder = OutreachBuilder(output_dir=f"output/{job_id}")
-        
-        results = []
-        processed = 0
+
         for page_id, page_ads in by_page.items():
             if processed >= limit:
                 break
-                
+
             page_name = page_ads[0].page_name
             landing = next((a.landing_url for a in page_ads if a.landing_url), None)
-            if not bool(direct_url or page_id):
-    
-                
-                # [SEED: 2399] Aggressive Enterprise Walled-Garden Filter & Invalid URL Rejection
-                is_invalid_protocol = landing and not landing.startswith(("http://", "https://"))
-                if is_invalid_protocol:
-                    _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Invalid URL protocol)"})
-                    continue
-    
-                # Check against broad enterprise keywords (no TLD required)
-                walled_gardens = [
-                    "amazon", "alibaba", "walmart", "target.", "ebay.", "etsy.com", "tiktok", "facebook.com", "instagram.com", "youtube.com", 
-                    "ulta.com", "sephora.com", "macys.com", "nordstrom.com", "wayfair.com", "homedepot.com", "lowes.com", "olive young", "neutrogena", "reitmans",
-                    "nike.com", "adidas.com", "puma.com", "underarmour.com", "lululemon.com", "apple.com", "samsung.com", "microsoft.com", "bestbuy.com", "costco.com",
-                    "mcdonalds.com", "starbucks.com", "subway.com", "burgerking.com", "wendys.com", "chick-fil-a.com", "tacobell.com", "kfc.com", "dominos.com",
-                    "loreal.com", "esteelauder.com", "clinique.com", "maybelline.com", "covergirl.com", "revlon.com", "glossier.com", "drunkelephant.com", "fentybeauty.com",
-                    "shein.", "temu.", "aliexpress.", "asos.", "zara.", "h&m.com", "uniqlo.", "gap.", "oldnavy.", "victoriassecret.",
-                    "kohls.com", "jcpenney.com", "ikea.com", "staples.com", "officedepot.com", "chewy.com", "petsmart.com", "petco.com", "autozone.com", "cvs.com",
-                    "walgreens.com", "chase.com", "bankofamerica.com", "wellsfargo.com", "citibank.com", "capitalone.com", "verizon.com", "att.com", "t-mobile.com",
-                    "netflix.com", "hulu.com", "disney.com", "hbo.com", "espn.com", "statefarm.com", "geico.com", "progressive.com", "allstate.com", "libertymutual.com",
-                    "shopee", "lazada", "mercadolibre", "rakuten", "allegro", "ozon",
-                    "play.google.com", "apps.apple.com", "itunes.apple.com", "microsoft.com/store",
-                    "steampowered.com", "epicgames.com", "roblox.com", "appstore", "google.com/store"
-                ]
-                # [SEED: 2399] HARD SKIP: Null URLs & Walled Gardens (Enterprise Junk)
-                if not landing or any(wg in landing.lower() for wg in walled_gardens):
-                    continue
-                is_walled_garden = any(wg in (landing or "").lower() or wg in page_name.lower() for wg in walled_gardens)
-                if is_walled_garden:
-                    _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
-                    continue
-    
-                # [SEED: 2399] MASTER UNIVERSAL SEMANTIC GUARD (Industrial Grade)
-                # 1. Dynamic Signal Extraction (DRY: Imports EXPANSION_MAP directly)
-                # [SEED: 2399] SAFE LOCALIZED EXPANSION MAP (Fixes ImportError)
-                # Hardcoded locally to prevent cross-module import failures.
-                _EXPANSION_MAP = {
-                    "skincare": ["skin", "beauty", "dermatology", "serum", "moisturizer", "facial", "cleanser", "cosmetic"],
-                    "health": ["wellness", "supplement", "fitness", "nutrition", "medical", "holistic", "vitamin", "organic"],
-                    "fitness": ["gym", "workout", "training", "weight loss", "crossfit", "yoga", "pilates", "exercise"],
-                    "marketing": ["seo", "agency", "digital marketing", "consulting", "b2b", "lead generation", "ppc", "branding"],
-                    "ecommerce": ["shop", "store", "buy", "boutique", "retail", "fashion", "apparel", "dropshipping"],
-                    "real estate": ["realty", "property", "mls", "mortgage", "homes", "realtor", "housing"],
-                    "woodworking": ["carpentry", "timber", "lumber", "craftsman", "custom furniture", "woodcraft"],
-                    "studio": ["photography", "portrait", "creative", "design", "agency"]
-                }
-                _k_words = [w for w in keyword.lower().split() if len(w) > 2]
-                _signals = list(_k_words)
-                _k_clean = keyword.lower().strip()
-                if _k_clean in _EXPANSION_MAP:
-                    _signals.extend(_EXPANSION_MAP[_k_clean])
-                
-                # 2. Digital/App Entity Rejection (Kills "Studio Camera App" anomalies)
-                _digital_negatives = ["app", "apk", "download", "play store", "mod", "hack", "cheat", "free download", "install now", "camera app"]
-                _neg_in_keyword = any(neg in _k_clean for neg in _digital_negatives)
-                
-                _ad_corpus = f"{page_name} {landing or ''}".lower()
-                for ad in page_ads:
-                    _ad_corpus += f" {ad.body or ''} {ad.title or ''}"
-                
-                if not _neg_in_keyword and any(neg in _ad_corpus for neg in _digital_negatives):
-                    _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Digital/App Entity)"})
-                    continue
-    
-                # 3. Smart Overlap (Semantic Match OR E-commerce/Service Intent)
-                _intent_markers = ["shop", "store", "buy", "cart", "checkout", "shipping", "boutique", "services", "agency", "clinic", "studio"]
-                _ecom_intent = any(w in _ad_corpus for w in _intent_markers)
-                _semantic_overlap = any(sig in _ad_corpus for sig in _signals)
-                
-                if not _semantic_overlap and not _ecom_intent:
-                    _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Zero semantic overlap with '{keyword}')"})
-                    continue
-    
+
+            # [SEED: 2399] Aggressive Enterprise Walled-Garden Filter
+            is_invalid_protocol = landing and not landing.startswith(("http://", "https://"))
+            if is_invalid_protocol:
+                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Invalid URL protocol)"})
+                continue
+
+            # Re-use Global Blacklist for consistency (FIX: No longer local scope)
+            walled_gardens = BIG_BRAND_BLACKLIST 
+
+            if not landing or any(wg in landing.lower() for wg in walled_gardens):
+                continue
+
+            is_walled_garden = any(wg in (landing or "").lower() or wg in page_name.lower() for wg in walled_gardens)
+            if is_walled_garden:
+                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
+                continue
+
+            # [SEED: 2399] MASTER UNIVERSAL SEMANTIC GUARD (Using Global Expanded Map)
+            # No need to redefine _EXPANSION_MAP here; it's now global.
+            
+            _k_words = [w for w in keyword.lower().split() if len(w) > 2]
+            _signals = list(_k_words)
+            _k_clean = keyword.lower().strip()
+            
+            # Check exact match first
+            if _k_clean in _EXPANSION_MAP:
+                _signals.extend(_EXPANSION_MAP[_k_clean])
+            else:
+                # Fuzzy match for compound keywords (e.g., "mental health hospital")
+                for key, vals in _EXPANSION_MAP.items():
+                    if key in _k_clean or _k_clean in key:
+                        _signals.extend(vals)
+            
+            # Deduplicate signals
+            _signals = list(set(_signals))
+
+            _digital_negatives = ["app", "apk", "download", "play store", "mod", "hack", "cheat", "free download", "install now", "camera app"]
+            _neg_in_keyword = any(neg in _k_clean for neg in _digital_negatives)
+
+            _ad_corpus = f"{page_name} {landing or ''}".lower()
+            for ad in page_ads:
+                _ad_corpus += f" {ad.body or ''} {ad.title or ''}"
+
+            if not _neg_in_keyword and any(neg in _ad_corpus for neg in _digital_negatives):
+                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Digital/App Entity)"})
+                continue
+
+            _intent_markers = ["shop", "store", "buy", "cart", "checkout", "shipping", "boutique", "services", "agency", "clinic", "studio"]
+            _ecom_intent = any(w in _ad_corpus for w in _intent_markers)
+            _semantic_overlap = any(sig in _ad_corpus for sig in _signals)
+
+            if not _semantic_overlap and not _ecom_intent:
+                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Zero semantic overlap with '{keyword}')"})
+                continue
+
 
             page = Page(id=page_id, name=page_name, url=landing, ads=page_ads, first_seen=datetime.now(timezone.utc))
             _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name} ({processed + 1}/{limit}): L1 creative scan"})
 
-            
+
             leaks = list(l1.scan(page))
             platform, conf, platform_evidence = "custom", 0.3, []
             html = None
             discovered_emails = []
-            # [SEED: 2399] Define before first use; no cross-iteration state leak
             is_invalid = landing and (not landing.startswith(("http://", "https://")) or "fbgeo" in landing)
+
             if landing and not is_invalid:
                 try:
-                    # [SEED: 2399] INDUSTRIAL WAF BYPASS (curl_cffi TLS Impersonation)
                     html = None
                     try:
                         from curl_cffi import requests as cffi_requests
@@ -435,30 +482,25 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                         if cffi_resp.status_code == 200 and "challenges.cloudflare.com" not in cffi_resp.text[:2000] and "<title>Just a moment..." not in cffi_resp.text[:2000]:
                             html = cffi_resp.text
                     except Exception: pass
+
                     if not html:
                         from ...cli import _fetch_html_resilient
-                        # [SEED: 2399] ELITE FETCH STRATEGY
-                        if bool(direct_url or page_id):
-                            html = _elite_fetch(landing, timeout=5)
-                        else:
-                            from ...cli import _fetch_html_resilient
-                            html = _fetch_html_resilient(landing)
+                        html = _fetch_html_resilient(landing)
+
                     if html:
-                        # [SEED: 2399] Enterprise/Retailer Recognition (Defeats Custom 30% fallback)
                         from urllib.parse import urlparse
                         domain_lower = urlparse(landing).netloc.lower()
                         if any(m in domain_lower for m in ["ulta.com", "amazon.", "walmart.", "target.", "ebay.", "etsy.com", "tiktok.com", "facebook.com", "instagram.com", "youtube.com"]):
                             platform, conf, platform_evidence = "custom", 0.99, [f"Major enterprise domain ({domain_lower}) - strategic audit applied"]
                         else:
                             platform, conf, platform_evidence = detector.detect(landing, html)
-                        
-                        # [SEED: 2399] Unstoppable Contact Discovery (Live -> Deep -> Wayback)
+
                         import re as _re_discover
                         raw_emails = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
                         raw_cleaned = [e for e in raw_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]
                         poison = ["window", "call", "apply", "src", "data", "length", "anim", "native", "function", "gst", "mzst", "vtls", "liquid", "sentry", "zipify", "bugsnag", "rollbar", "newrelic", "datadome", "example.com", "example.org", "example.net", "test.com", "localhost", "stripe.com", "paypal.com", "shopify.com", "wix.com", "wordpress.com", "squarespace.com", "notifications@", "noreply@", "no-reply@", "donotreply@", "trustandsafety@", "sellersupport@", "community@"]
                         discovered_emails = list(set([e for e in raw_cleaned if not any(p in e.lower() for p in poison)]))[:5]
-                        
+
                         if not discovered_emails:
                             contact_paths = ["/contact", "/about", "/imprint", "/contact-us", "/pages/contact-us", "/policies/privacy-policy", "/pages/contact"]
                             from ...cli import _fetch_html_stealth
@@ -467,11 +509,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                                     contact_url = f"https://{domain_lower}{path}"
                                     contact_html = _fetch_html_stealth(contact_url)
                                     if contact_html:
-                                        # [SEED: 2399] TOP 1 BULLETPROOF CONTACT EXTRACTION (JSON-LD + Mailto + Regex)
                                         import re as _re_dom
                                         import json as _json_dom
-                                        
-                                        # 1. Schema.org JSON-LD Extraction (Industrial-grade, bypasses DOM obfuscation)
                                         schema_emails = []
                                         for schema_match in _re_dom.finditer(r"""<script[^>]+type=["']application/ld\+json["'][^>]*>(.*?)</script>""", contact_html, _re_dom.IGNORECASE | _re_dom.DOTALL):
                                             try:
@@ -487,27 +526,18 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                                                         for item in obj: extract_schema_emails(item)
                                                 extract_schema_emails(data)
                                             except Exception: pass
-                                        
-                                        # 2. DOM-Level Mailto Extraction
                                         mailto_links = _re_dom.findall(r"""href=["']mailto:([^"']+)""", contact_html, _re_dom.IGNORECASE)
-                                        
-                                        # 3. Standard Regex Fallback
                                         raw_emails_deep = _re_dom.findall(r"""[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}""", contact_html)
-                                        
-                                        # Combine, clean, and deduplicate
                                         all_found = schema_emails + mailto_links + raw_emails_deep
                                         cleaned = []
                                         for e in all_found:
                                             e = e.strip().split('?')[0]
                                             if e and '@' in e and not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io', '.example.com')):
                                                 cleaned.append(e)
-                                        
-                                        # [SEED: 2399] Filter out form URLs - only keep actual email addresses
                                         discovered_emails = [e for e in set(cleaned) if _re_dom.match(r'^[^@]+@[^@]+\.[^@]+$', e)][:5]
                                         if discovered_emails: break
                                 except Exception: pass
-                        
-                        # [SEED: 2399] ELITE WAF BYPASS CONTACT PROBE (Replaces httpx.head)
+
                         if not discovered_emails:
                             for path in ["/contact", "/pages/contact-us", "/contact-us", "/about"]:
                                 try:
@@ -540,7 +570,6 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                                         if discovered_emails: break
                                 except Exception: pass
 
-            # [SEED: 2399] Tier-4: DNS MX + SMTP RCPT verified role contacts (Hunter-class)
                         if not discovered_emails:
                             try:
                                 import dns.resolver, smtplib
@@ -569,7 +598,6 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                             except ImportError:
                                 pass
 
-                        # Wayback Fallback for Emails (Defeats bot protection via curl_cffi)
                         if not discovered_emails:
                             try:
                                 from curl_cffi import requests as cffi_requests
@@ -587,8 +615,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
 
                 except Exception:
                     pass
-            
-            # [SEED: 2399] Evidence snapshot reuse (shared store, 24h TTL) => bit-identical re-audits
+
             os.makedirs("output/_evidence", exist_ok=True)
             snapshot_path = f"output/_evidence/{page_id}.json"
             evidence_mode = "live"
@@ -607,7 +634,6 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 try:
                     from ...leak_scan.telemetry_collector import TelemetryCollector
                     page.raw = TelemetryCollector().collect(landing)
-                    # [SEED: 2399] WAF/TIMEOUT CONTEXT INJECTION
                     if not html or any(waf in html for waf in ["challenges.cloudflare.com", "<title>Just a moment...", "cdn-cgi/challenge-platform", "DataDome", "Imperva"]):
                         page.raw["fetch_blocked"] = True
                     if html:
@@ -617,14 +643,32 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                     _write_status(job_id, {"status": "running", "progress": min(95, 45 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: L2/L3 telemetry captured (live)"})
                 except Exception:
                     pass
+
+            # [SEED: 2399] CROSS-PLATFORM TIMEOUT GUARD FOR DEEP SCAN
             if page.raw:
-                # [SEED: 2399] SAFE CROSS-PLATFORM SCAN EXECUTION
+                is_direct_local = bool(direct_url or page_id) # Always false here in Branch 2, but kept for safety
+                def perform_deep_scan():
+                    return l2.scan(page) + l3.scan(page)
+
                 try:
-                    leaks += l2.scan(page) + l3.scan(page)
+                    if is_direct_local:
+                        import concurrent.futures
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                            future = executor.submit(perform_deep_scan)
+                            try:
+                                leaks += future.result(timeout=20)
+                            except concurrent.futures.TimeoutError:
+                                future.cancel()
+                                _write_status(job_id, {
+                                    "status": "running",
+                                    "progress": min(95, 75 + int(20 * processed / max(limit, 1))),
+                                    "stage": f"Timeout: Skipping deep telemetry for {page_name}"
+                                })
+                    else:
+                        leaks += perform_deep_scan()
                 except Exception as e:
-                    print(f"[WARN] Scan error for {page_name}: {e}")
-                    
-                    
+                    logger.error(f"Deep scan error for {page_name}: {e}")
+
             fixes = []
             for leak in leaks:
                 try:
@@ -633,8 +677,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                     fixes.append(forge.generate(leak, "custom", conf))
                 except Exception:
                     pass
-                    
-            # [SEED: 2399] GRAPH API FINANCIAL INGESTION (Hard Data > Heuristics)
+
             financial_data = None
             try:
                 from ...ingest.graph_financial import get_financial_data_for_page
@@ -645,7 +688,6 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 page.raw = page.raw or {}
                 page.raw["financial_data"] = financial_data
 
-            # [SEED: 2399] COMPETITOR INTELLIGENCE (Free Meta Ad Library API)
             competitor_data = None
             try:
                 from ...intelligence.competitor import get_competitor_benchmark
@@ -655,11 +697,12 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             if competitor_data:
                 page.raw = page.raw or {}
                 page.raw["competitor_data"] = competitor_data
+
             pack = builder.build(page, leaks, fixes, financial_data=financial_data)
+
             try:
                 _email_report = select_best_email(discovered_emails)
                 _intent_report = classify_intent_from_page(page)
-
                 try:
                     _conf_f = float(conf)
                 except Exception:
@@ -790,10 +833,10 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 "competitor_benchmark": competitor_data is not None
             })
             processed += 1
-            
+
         with open(f"output/{job_id}/status.json", "w") as f:
             json.dump({"status": "completed", "results": results}, f)
-            
+
     except Exception as e:
         _fail_job(job_id, e, stage="run_scan_pipeline")
         raise
@@ -922,10 +965,10 @@ async def get_report_pdf(job_id: str, page_id: str):
 
     if not _re_pdf.fullmatch(r"[0-9a-zA-Z\-]+", job_id) or not _re_pdf.fullmatch(r"[0-9a-zA-Z\-]+", page_id):
         return {"status": "error", "detail": "Invalid identifiers."}
-    
+
     md_path = Path(f"output/{job_id}/{page_id}/teardown.md")
     if not md_path.exists(): return {"status": "error", "detail": "Report not found."}
-    
+
     def _generate_pdf_sync(md_path_str: str) -> bytes:
         from playwright.sync_api import sync_playwright
         import markdown as _md_pdf
@@ -944,7 +987,7 @@ async def get_report_pdf(job_id: str, page_id: str):
     loop = asyncio.get_running_loop()
     with concurrent.futures.ThreadPoolExecutor() as pool:
         pdf_bytes = await loop.run_in_executor(pool, _generate_pdf_sync, str(md_path))
-        
+
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={page_id}_audit.pdf"})
 
 
@@ -982,14 +1025,14 @@ async def stream_scan_status(job_id: str):
         import asyncio, json
         from pathlib import Path
         status_file = Path(f"output/{job_id}/status.json")
-        
+
         while True:
             if status_file.exists():
                 try:
                     with open(status_file, "r", encoding="utf-8") as f:
                         job = json.load(f)
                     yield f"data: {json.dumps(job)}\n\n"
-                    if job.get("status") in ["completed", "error"]:
+                    if job.get("status") in ["completed", "error", "completed_with_insight"]:
                         break
                 except (json.JSONDecodeError, ValueError):
                     yield 'data: {"status": "running", "progress": 0, "stage": "Processing scan data..."}\n\n'
@@ -997,6 +1040,6 @@ async def stream_scan_status(job_id: str):
                 yield 'data: {"status": "not_found"}\n\n'
                 break
             await asyncio.sleep(2)
-            
+
     from fastapi.responses import StreamingResponse
     return StreamingResponse(event_generator(), media_type="text/event-stream")
