@@ -2,6 +2,7 @@
 import os
 import json
 import uuid
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter
@@ -132,6 +133,74 @@ NICHE_TAXONOMY = {
     "local_service": ["directory", "lead generation", "franchise", "call center"],
     "default": ["photography", "agency", "directory", "freelancer", "reseller"]
 }
+
+
+def is_big_brand_domain(url_or_name: str) -> bool:
+    """
+    [SEED: 2399] SMART BRAND DETECTOR
+    Extracts the Second-Level Domain (SLD) and checks against a robust brand list.
+    Handles .com, .ae, .co.uk, .de, .fr, etc. automatically.
+    """
+    try:
+        from urllib.parse import urlparse
+        # If it's a URL, parse hostname. If it's a name, treat as hostname.
+        if url_or_name.startswith(('http://', 'https://')):
+            parsed = urlparse(url_or_name)
+            hostname = parsed.hostname
+        else:
+            hostname = url_or_name
+            
+        if not hostname:
+            return False
+            
+        # Normalize: strip www. and convert to lowercase
+        clean_host = hostname.replace('www.', '').lower()
+        
+        # Define Root Brands (No TLD)
+        ROOT_BRANDS = {
+            "amazon", "alibaba", "walmart", "target", "ebay", "etsy",
+            "tiktok", "facebook", "instagram", "youtube", "meta", "whatsapp",
+            "apple", "samsung", "microsoft", "google", "netflix",
+            "ulta", "sephora", "macy", "nordstrom", "wayfair",
+            "homedepot", "lowes", "costco", "kohls", "jcpenney",
+            "ikea", "staples", "officedepot", "bestbuy",
+            "neutrogena", "loreal", "esteelauder", "clinique",
+            "maybelline", "covergirl", "revlon", "glossier",
+            "drunkelephant", "fentybeauty", "shein", "temu",
+            "aliexpress", "asos", "zara", "hm", "uniqlo",
+            "gap", "oldnavy", "victoriassecret",
+            "nike", "adidas", "puma", "underarmour", "lululemon",
+            "next", "emp", "primark", "boohoo", "prettylittlething",
+            "mcdonalds", "starbucks", "subway", "burgerking", "wendys",
+            "chickfila", "tacobell", "kfc", "dominos",
+            "cvs", "walgreens", "chewy", "petsmart", "petco",
+            "autozone", "statefarm", "geico", "progressive", "allstate",
+            "libertymutual", "verizon", "att", "tmobile",
+            "shopee", "lazada", "mercadolibre", "rakuten", "allegro", "ozon",
+            "steam", "epicgames", "roblox",
+            "booking", "expedia", "airbnb", "uber", "lyft",
+            "spotify", "soundcloud", "discord", "slack", "zoom",
+            "salesforce", "oracle", "ibm", "hp", "dell", "lenovo"
+        }
+        
+        # Extract SLD: Get the part immediately before the TLD
+        # e.g., "nike.ae" -> ["nike", "ae"] -> SLD = "nike"
+        # e.g., "next.co.uk" -> ["next", "co", "uk"] -> SLD = "next"
+        parts = clean_host.split('.')
+        sld = ""
+        if len(parts) >= 2:
+            # Handle complex TLDs like co.uk, com.au
+            if parts[-2] in ['co', 'com', 'org', 'net', 'gov', 'edu'] and len(parts) > 2:
+                sld = parts[-3]
+            else:
+                sld = parts[-2]
+                
+        return sld in ROOT_BRANDS
+        
+    except Exception:
+        return False
+
+
 
 def resolve_dynamic_exclusions(html: str) -> list:
     try:
@@ -284,12 +353,9 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                  except Exception:
                      target_name = target_landing[:50]
 
-            # --- BIG BRAND GUARD ---
+            # --- BIG BRAND GUARD (SMART) ---
             if target_landing:
-                domain_lower = target_landing.lower()
-                is_big_brand = any(wg in domain_lower for wg in BIG_BRAND_BLACKLIST)
-
-                if is_big_brand:
+                if is_big_brand_domain(target_landing):
                     msg = (
                         f"[RESOURCE OPTIMIZATION] '{target_name}' is a large enterprise with in-house marketing. "
                         "Scan aborted to save compute. Pivot to mid-market competitors."
@@ -471,9 +537,26 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                         try:
                             with open(snapshot_path, "r", encoding="utf-8") as sf:
                                 page.raw = json.load(sf)
-                            use_snapshot = True
-                            evidence_mode = "snapshot"
-                            logger.info(f"Using cached telemetry for {target_name}")
+                            # Reject poisoned snapshots (Cloudflare challenge, empty, WAF block)
+                            _snap_html = (page.raw.get("html") or "").lower() if isinstance(page.raw, dict) else ""
+                            _snap_poisoned = (
+                                not _snap_html
+                                or len(_snap_html) < 500
+                                or "just a moment" in _snap_html
+                                or "challenges.cloudflare.com" in _snap_html
+                                or "cdn-cgi/challenge-platform" in _snap_html
+                                or "datadome" in _snap_html
+                            )
+                            if _snap_poisoned:
+                                logger.warning(f"Discarding poisoned snapshot for {target_name} (WAF/empty)")
+                                try:
+                                    os.remove(snapshot_path)
+                                except Exception:
+                                    pass
+                            else:
+                                use_snapshot = True
+                                evidence_mode = "snapshot"
+                                logger.info(f"Using cached telemetry for {target_name}")
                         except Exception:
                             pass
 
@@ -623,16 +706,14 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Invalid URL protocol)"})
                 continue
 
-            # Re-use Global Blacklist for consistency (FIX: No longer local scope)
-            walled_gardens = BIG_BRAND_BLACKLIST
-
-            if not landing or any(wg in landing.lower() for wg in walled_gardens):
+            # [SEED: 2399] SMART ENTERPRISE GUARD
+            # Checks both Landing URL and Page Name for Big Brand signatures
+            if not landing:
                 continue
-
-            is_walled_garden = any(wg in (landing or "").lower() or wg in page_name.lower() for wg in walled_gardens)
-            if is_walled_garden:
-                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
-                continue
+                
+            if is_big_brand_domain(landing) or is_big_brand_domain(page_name):
+                 _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
+                 continue
 
             # [SEED: 2399] STRICT SEMANTIC GUARD (FIXED)
             # Prevents false positives like "Furniture Store" appearing in "Skincare" searches.
@@ -665,6 +746,20 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
 
             # 2. STRICT RELEVANCE CHECK
             _semantic_overlap = any(sig in _ad_corpus for sig in _signals)
+
+            # 2b. [SEED: 2399] RESELLER/DISTRIBUTOR DOMAIN GUARD
+            # If page_name contains a brand token but the landing domain does not,
+            # the ad lands on a reseller/distributor (e.g. Avène -> beautycare-iq.com).
+            if landing:
+                from urllib.parse import urlparse as _urlparse_guard
+                _domain_guard = _urlparse_guard(landing).netloc.lower()
+                _name_tokens_guard = [t for t in re.split(r"[^a-z0-9]+", page_name.lower()) if len(t) > 3]
+                # Strip TLDs and generic words from page_name tokens
+                _name_tokens_guard = [t for t in _name_tokens_guard if t not in ("store", "shop", "official", "bath", "co")]
+                _domain_matches_name = any(tok in _domain_guard for tok in _name_tokens_guard)
+                if _name_tokens_guard and not _domain_matches_name:
+                    _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Reseller/Distributor domain: {_domain_guard})"})
+                    continue
             
             # Define specific category markers that override generic "shop" intent
             # If the user searched for "skincare", only allow pages mentioning skincare/beauty terms.
@@ -844,8 +939,25 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                     try:
                         with open(snapshot_path, "r", encoding="utf-8") as sf:
                             page.raw = json.load(sf)
-                        use_snapshot = True
-                        evidence_mode = "snapshot"
+                        # Reject poisoned snapshots (Cloudflare challenge, empty, WAF block)
+                        _snap_html = (page.raw.get("html") or "").lower() if isinstance(page.raw, dict) else ""
+                        _snap_poisoned = (
+                            not _snap_html
+                            or len(_snap_html) < 500
+                            or "just a moment" in _snap_html
+                            or "challenges.cloudflare.com" in _snap_html
+                            or "cdn-cgi/challenge-platform" in _snap_html
+                            or "datadome" in _snap_html
+                        )
+                        if _snap_poisoned:
+                            logger.warning(f"Discarding poisoned snapshot for {page_name} (WAF/empty)")
+                            try:
+                                os.remove(snapshot_path)
+                            except Exception:
+                                pass
+                        else:
+                            use_snapshot = True
+                            evidence_mode = "snapshot"
                     except Exception:
                         pass
             if not use_snapshot and landing and not is_invalid:
