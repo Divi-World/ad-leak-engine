@@ -407,27 +407,60 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 _fail_job(job_id, Exception(err_msg), stage="validation")
                 raise Exception(err_msg) 
 
-            # [SEED: 2399] MEANINGFUL CONTENT GATE (NEW)
+            # [SEED: 2399] RESILIENT CONTENT GATE (UPGRADED FOR LATENCY)
             # Verifies that the domain serves actual content, not just a parked page or error.
+            # Handles slow TTFB and partial downloads gracefully without killing valid SMB scans.
             try:
                 from curl_cffi import requests as cffi_requests
                 import re as _re_gate
+                import time as _time_gate
+
+                max_retries = 2
+                resp_probe = None
                 
-                # Quick probe with strict timeout
-                resp_probe = cffi_requests.get(target_landing, impersonate="chrome120", timeout=5, allow_redirects=True)
-                
+                for attempt in range(max_retries):
+                    try:
+                        # Increased timeout to 15s to accommodate heavy Shopify/WooCommerce loads
+                        # Added connect_timeout separately to distinguish DNS/Connect failures from Read timeouts
+                        resp_probe = cffi_requests.get(
+                            target_landing, 
+                            impersonate="chrome120", 
+                            timeout=(10, 15), # (connect_timeout, read_timeout)
+                            allow_redirects=True
+                        )
+                        break # Success on first try usually
+                    except cffi_requests.exceptions.Timeout:
+                        if attempt < max_retries - 1:
+                            _time_gate.sleep(1) # Brief backoff
+                            continue
+                        else:
+                            raise # Re-raise if final attempt fails
+                    except cffi_requests.exceptions.ConnectionError:
+                        # Connection refused/reset usually means dead site, fail fast
+                        raise
+                    except Exception as net_err:
+                        # Other network glitches, retry once
+                        if attempt < max_retries - 1:
+                            _time_gate.sleep(1)
+                            continue
+                        else:
+                            raise
+
+                if resp_probe is None:
+                     raise Exception("Failed to establish connection after retries.")
+
                 # 1. Status Code Check
-                if resp_probe.status_code != 200:
+                if resp_probe.status_code >= 400:
                      raise Exception(f"HTTP {resp_probe.status_code} - Site unreachable or error.")
-                
+
                 body_text = resp_probe.text
                 body_preview = body_text[:2000].lower()
-                
+
                 # 2. Parking Lot / Placeholder Detection
                 junk_markers = [
-                    "domain is parked", 
-                    "this domain is reserved", 
-                    "under construction", 
+                    "domain is parked",
+                    "this domain is reserved",
+                    "under construction",
                     "coming soon",
                     "godaddy.com/domainsearch/find",
                     "sedoparking.com",
@@ -439,11 +472,12 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                     "expired domain",
                     "for sale"
                 ]
-                
+
                 if any(marker in body_preview for marker in junk_markers):
                     raise Exception("Domain appears to be parked, expired, or for sale.")
-                    
+
                 # 3. Minimum Content Length Check (Reject tiny/empty pages)
+                # Note: If we got here, we likely downloaded something substantial unless it's a redirect loop
                 if len(body_text) < 500:
                     raise Exception("Page content too sparse to audit (<500 chars).")
 
@@ -454,7 +488,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                     generic_titles = ["home", "index", "welcome", "untitled document", "new page"]
                     if title_val in generic_titles:
                          # Allow if body is substantial, but warn
-                         pass 
+                         pass
 
             except Exception as e:
                 err_msg = f"Target '{target_name}' failed Content Gate: {str(e)}"
@@ -1021,7 +1055,22 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             competitor_data = None
             try:
                 from ...intelligence.competitor import get_competitor_benchmark
-                competitor_data = get_competitor_benchmark(page_id, niche=keyword, country=country, observed_ads=ads)
+                
+                # [SEED: 2399] ENRICH COMPETITOR CONTEXT WITH TRACKING DATA
+                # Extract architecture from the first L2 leak if available
+                _prospect_arch = "UNKNOWN"
+                for l in leaks:
+                    if l.tier == "L2" and "tracking_architecture" in l.evidence:
+                        _prospect_arch = l.evidence["tracking_architecture"]
+                        break
+                        
+                competitor_data = get_competitor_benchmark(
+                    page_id, 
+                    niche=keyword, 
+                    country=country, 
+                    observed_ads=ads,
+                    prospect_tracking_architecture=_prospect_arch # <--- NEW PARAM
+                )
             except Exception:
                 pass
             if competitor_data:

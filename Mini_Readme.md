@@ -27,6 +27,9 @@ Ensure Redis is Running:
 If you don't have Redis installed locally, the easiest way on Windows is via Docker:
    docker run -d -p 6379:6379 redis:alpine
 
+python -c "import redis; r = redis.Redis(host='localhost', port=6379, db=0); r.flushdb(); print('Redis Flushed')"
+
+
 Start the Celery Worker (in a NEW terminal):
    celery -A src.ad_leak_engine.orchestrator.celery_app worker --loglevel=info --pool=solo
 

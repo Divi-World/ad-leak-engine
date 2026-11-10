@@ -90,7 +90,10 @@ class CustomFixGenerator(AbstractFixGenerator):
         )
 
     def _fix_gtm(self, leak: Leak, confidence: float) -> Fix:
-        code = self.codegen.render("custom", "gtm_tag.html.j2")
+        pixel_id = leak.evidence.get("detected_pixel_id") or "YOUR_PIXEL_ID_HERE"
+        raw_code = self.codegen.render("custom", "gtm_tag.html.j2")
+        final_code = raw_code.replace("'YOUR_PIXEL_ID_HERE'", f"'{pixel_id}'")
+        
         guide = self.markdown.generate("custom", {
             "leak_signal": leak.signal,
             "recommendation": leak.recommendation,
@@ -105,7 +108,7 @@ class CustomFixGenerator(AbstractFixGenerator):
                 "language": "html",
                 "filename": "gtm-tag.html",
                 "location": "Google Tag Manager > Tags > New > Custom HTML",
-                "code": code,
+                "code": final_code,
             }],
             verification_steps=[
                 "Create a Custom HTML tag in Google Tag Manager",
@@ -116,12 +119,15 @@ class CustomFixGenerator(AbstractFixGenerator):
                 "Delete or pause the GTM tag",
                 "Publish the container",
             ],
-            expected_outcome="Meta Pixel fires on all pages via Google Tag Manager.",
+            expected_outcome=f"Meta Pixel ({pixel_id}) fires on all pages via Google Tag Manager.",
             confidence=confidence,
         )
 
     def _fix_server_side(self, leak: Leak, confidence: float) -> Fix:
-        code = self.codegen.render("custom", "server_webhook.py.j2")
+        pixel_id = leak.evidence.get("detected_pixel_id") or "YOUR_PIXEL_ID_HERE"
+        raw_code = self.codegen.render("custom", "server_webhook.py.j2")
+        final_code = raw_code.replace("'YOUR_PIXEL_ID_HERE'", f"'{pixel_id}'")
+        
         guide = self.markdown.generate("custom", {
             "leak_signal": leak.signal,
             "recommendation": leak.recommendation,
@@ -136,7 +142,7 @@ class CustomFixGenerator(AbstractFixGenerator):
                 "language": "python",
                 "filename": "capi_webhook.py",
                 "location": "Server-side endpoint (deploy to your backend)",
-                "code": code,
+                "code": final_code,
             }],
             verification_steps=[
                 "Deploy the webhook to your backend",
@@ -146,7 +152,7 @@ class CustomFixGenerator(AbstractFixGenerator):
             rollback_steps=[
                 "Remove the webhook endpoint from your backend",
             ],
-            expected_outcome="Server-side Purchase events sent to Meta CAPI with hashed PII.",
+            expected_outcome=f"Server-side Purchase events sent to Meta CAPI with hashed PII using Pixel {pixel_id}.",
             confidence=confidence,
         )
 

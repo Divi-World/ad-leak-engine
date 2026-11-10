@@ -90,7 +90,17 @@ class ShopifyFixGenerator(AbstractFixGenerator):
         )
 
     def _fix_pixel(self, leak: Leak, confidence: float) -> Fix:
-        code = self.codegen.render("shopify", "pixel_base.liquid.j2")
+        # [SEED: 2399] DYNAMIC PIXEL INJECTION
+        pixel_id = leak.evidence.get("detected_pixel_id") or "YOUR_PIXEL_ID_HERE"
+        
+        # Pass pixel_id to renderer (Assuming CodeGenerator supports kwargs/context)
+        # If your CodeGenerator.render signature is fixed, you may need to update templates 
+        # to use {{ pixel_id }} instead of hardcoded strings.
+        # For now, we assume render accepts a context dict or we string-replace post-render.
+        
+        raw_code = self.codegen.render("shopify", "pixel_base.liquid.j2")
+        final_code = raw_code.replace("'YOUR_PIXEL_ID_HERE'", f"'{pixel_id}'")
+        
         guide = self.markdown.generate("shopify", {
             "leak_signal": leak.signal,
             "recommendation": leak.recommendation,
@@ -105,25 +115,29 @@ class ShopifyFixGenerator(AbstractFixGenerator):
                 "language": "liquid",
                 "filename": "theme.liquid",
                 "location": "<head>",
-                "code": code,
+                "code": final_code, # <--- INJECTED CODE
             }],
             verification_steps=[
                 "Go to Shopify Admin > Online Store > Themes > Edit Code",
                 "Open theme.liquid and confirm the pixel snippet is inside <head>",
                 "Visit your storefront with the Meta Pixel Helper extension installed",
-                "Confirm the PageView event fires with your Pixel ID",
+                "Confirm the PageView event fires with YOUR SPECIFIC PIXEL ID",
             ],
             rollback_steps=[
                 "Open theme.liquid in the Shopify code editor",
                 "Remove the Meta Pixel snippet from <head>",
                 "Click Save",
             ],
-            expected_outcome="Meta Pixel fires PageView on every storefront page, restoring conversion tracking.",
+            expected_outcome=f"Meta Pixel ({pixel_id}) fires PageView on every storefront page, restoring conversion tracking.",
             confidence=confidence,
         )
 
     def _fix_customer_events(self, leak: Leak, confidence: float) -> Fix:
-        code = self.codegen.render("shopify", "customer_events.js.j2")
+        # [SEED: 2399] DYNAMIC PIXEL INJECTION
+        pixel_id = leak.evidence.get("detected_pixel_id") or "YOUR_PIXEL_ID_HERE"
+        raw_code = self.codegen.render("shopify", "customer_events.js.j2")
+        final_code = raw_code.replace("'YOUR_PIXEL_ID_HERE'", f"'{pixel_id}'")
+        
         guide = self.markdown.generate("shopify", {
             "leak_signal": leak.signal,
             "recommendation": leak.recommendation,
@@ -138,7 +152,7 @@ class ShopifyFixGenerator(AbstractFixGenerator):
                 "language": "javascript",
                 "filename": "customer-events.js",
                 "location": "Shopify Admin > Settings > Customer Events > Add custom pixel",
-                "code": code,
+                "code": final_code,
             }],
             verification_steps=[
                 "Go to Shopify Admin > Settings > Customer Events",
@@ -151,7 +165,7 @@ class ShopifyFixGenerator(AbstractFixGenerator):
                 "Remove the custom pixel",
                 "Click Save",
             ],
-            expected_outcome="All 6 Shopify Customer Events fire server-side with deduplicated event_ids.",
+            expected_outcome=f"All 6 Shopify Customer Events fire server-side with deduplicated event_ids using Pixel {pixel_id}.",
             confidence=confidence,
         )
 

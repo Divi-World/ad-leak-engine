@@ -53,7 +53,23 @@ def discover_emails_from_page(html: str, base_url: str = "") -> list[str]:
     """Extract emails from HTML content using regex and mailto links."""
     if not html:
         return []
-        
+
+    # [SEED: 2399] Unescape JSON-escaped HTML before regex extraction.
+    # Snapshots store HTML as JSON strings, so \u003e/\u003c/\u0026 leak into email matches.
+    import json as _json
+    import html as _html_mod
+    if "\\u00" in html or "\\u003" in html:
+        try:
+            # Decode JSON escapes (\u003e etc.) in one pass
+            html = _json.loads(f'"{html}"') if not html.startswith('"') else _json.loads(html)
+        except Exception:
+            # Fallback: regex-replace common escape sequences
+            html = re.sub(r"\\u003c", "<", html)
+            html = re.sub(r"\\u003e", ">", html)
+            html = re.sub(r"\\u0026", "&", html)
+            html = re.sub(r"\\/", "/", html)
+    html = _html_mod.unescape(html)
+
     emails = set()
     
     # 1. Regex extraction
@@ -78,17 +94,34 @@ def _is_valid_business_email(email: str) -> bool:
     """Filter out noise, assets, and suspicious domains."""
     if not email or '@' not in email:
         return False
-        
+
     local, domain = email.rsplit('@', 1)
-    
+
+    # [SEED: 2399] Reject JSON escape fragments (u003e, u003c, u0026 leaked from escaped HTML)
+    if local.startswith(('u003', 'u002', 'u00a', 'u00b')):
+        return False
+
     # Reject common noise
     noise_domains = ["example.com", "test.com", "localhost", "sentry.io", "bugsnag", "newrelic", "datadome"]
     if any(nd in domain for nd in noise_domains):
         return False
-        
+
+    # [SEED: 2399] Reject free-mail providers on business landing pages
+    # These are form-test artifacts or scraped placeholder addresses, not real business contacts.
+    freemail_domains = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com",
+                        "icloud.com", "protonmail.com", "mail.com", "yandex.com", "gmx.com"}
+    if domain in freemail_domains:
+        return False
+
+    # [SEED: 2399] Reject malformed locals (leading/trailing punctuation, >80 chars)
+    if not re.match(r"^[a-z0-9][a-z0-9._%+-]*$", local) or len(local) > 80:
+        return False
+
     # Reject asset extensions
     if local.endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.js', '.css')):
         return False
+
+    return True
         
     return True
 

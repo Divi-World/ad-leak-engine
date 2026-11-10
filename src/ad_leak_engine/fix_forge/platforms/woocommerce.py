@@ -113,7 +113,11 @@ class WooCommerceFixGenerator(AbstractFixGenerator):
         )
 
     def _fix_capi(self, leak: Leak, confidence: float) -> Fix:
-        code = self.codegen.render("woocommerce", "functions_snippet.php.j2")
+        # [SEED: 2399] DYNAMIC PIXEL INJECTION
+        pixel_id = leak.evidence.get("detected_pixel_id") or "YOUR_PIXEL_ID_HERE"
+        raw_code = self.codegen.render("woocommerce", "functions_snippet.php.j2")
+        final_code = raw_code.replace("'YOUR_PIXEL_ID_HERE'", f"'{pixel_id}'")
+        
         guide = self.markdown.generate("woocommerce", {
             "leak_signal": leak.signal,
             "recommendation": leak.recommendation,
@@ -128,11 +132,11 @@ class WooCommerceFixGenerator(AbstractFixGenerator):
                 "language": "php",
                 "filename": "functions.php",
                 "location": "Child theme functions.php (bottom of file)",
-                "code": code,
+                "code": final_code,
             }],
             verification_steps=[
                 "Add the snippet to your child theme's functions.php",
-                "Replace YOUR_PIXEL_ID_HERE and YOUR_ACCESS_TOKEN_HERE",
+                "Verify YOUR_PIXEL_ID_HERE was replaced with your actual ID",
                 "Place a test order",
                 "Check Meta Events Manager for a server-side Purchase event with event_id",
             ],
@@ -140,7 +144,7 @@ class WooCommerceFixGenerator(AbstractFixGenerator):
                 "Remove the added snippet from functions.php",
                 "Clear any caching plugins",
             ],
-            expected_outcome="Server-side Purchase events fire with hashed PII and deduplicated event_ids.",
+            expected_outcome=f"Server-side Purchase events fire with hashed PII and deduplicated event_ids using Pixel {pixel_id}.",
             confidence=confidence,
         )
 

@@ -2,6 +2,7 @@
 import os
 import json
 import uuid
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter
@@ -48,6 +49,32 @@ _EXPANSION_MAP = {
     "woodworking": ["carpentry", "timber", "lumber", "craftsman", "custom furniture", "woodcraft"],
     "studio": ["photography", "portrait", "creative", "design", "agency"],
 
+    # --- [SEED: 2399] MISSING CONSUMER VERTICALS (ADDED) ---
+    "home": ["home decor", "home improvement", "furniture", "interior design", "homeware",
+             "home goods", "furnishings", "home accessories", "kitchenware", "bedding"],
+    "fashion": ["clothing", "apparel", "boutique", "streetwear", "luxury fashion", "accessories",
+                "shoes", "handbags", "jewelry", "watches", "sunglasses"],
+    "beauty": ["makeup", "cosmetics", "lipstick", "foundation", "beauty salon", "nail salon",
+               "hair salon", "beauty supply", "fragrance", "perfume"],
+    "pets": ["pet supplies", "pet food", "dog training", "veterinary", "pet grooming",
+             "pet insurance", "cat litter", "dog toys", "pet adoption"],
+    "gaming": ["video games", "esports", "gaming pc", "console", "game server", "mobile game",
+               "gaming chair", "streaming", "gaming mouse", "gaming keyboard"],
+    "crypto": ["bitcoin", "ethereum", "blockchain", "web3", "crypto exchange", "nft", "defi", "wallet"],
+    "gambling": ["casino", "sportsbook", "betting", "poker", "lottery", "online casino", "slots"],
+    "dating": ["dating app", "singles", "matchmaking", "hookup", "relationship", "dating site"],
+    "wedding": ["wedding planning", "bridal", "wedding dress", "wedding venue",
+                "wedding photographer", "engagement ring", "wedding invitation"],
+    "baby": ["baby products", "stroller", "diapers", "maternity", "parenting", "toddler",
+             "nursery", "baby food", "baby monitor"],
+    "sports": ["sports equipment", "athletic wear", "team sports", "sports betting",
+               "sports nutrition", "sports memorabilia", "sports apparel"],
+    "food": ["food delivery", "meal kit", "grocery", "snack", "coffee", "tea",
+             "supplement drink", "wine", "spirits", "bakery"],
+    "electronics": ["smartphone", "laptop", "headphones", "smartwatch", "tv", "camera",
+                    "drone", "gadget", "tablet", "speaker"],
+    "nonprofit": ["charity", "donation", "fundraising", "ngo", "foundation", "volunteer", "social cause"],
+
     # --- Institutional & High-Value Verticals (NEW) ---
     "hospital": ["hospital marketing", "patient acquisition", "health system advertising", "telehealth",
                  "urgent care", "specialty clinic", "medical group", "hospital recruitment"],
@@ -65,7 +92,7 @@ _EXPANSION_MAP = {
     # --- Other High-Spend Verticals (NEW) ---
     "finance": ["bank", "insurance", "fintech", "accounting", "tax prep", "wealth management", "lending"],
     "legal": ["law firm", "attorney", "personal injury", "immigration lawyer", "family law", "estate planning"],
-    "automotive": ["car dealership", "auto repair", "car rental", "ev charging", "auto insurance"],
+    "automotive": ["car dealership", "auto repair", "car rental", "ev charging", "auto insurance", "car"],
     "travel": ["hotel", "resort", "airline", "travel agency", "vacation rental", "tour operator"],
     "restaurant": ["restaurant", "cafe", "catering", "food delivery", "bakery", "bar"],
     "home_services": ["plumbing", "roofing", "hvac", "landscaping", "cleaning service", "pest control"],
@@ -226,102 +253,151 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             target_name = "Direct Target"
             target_landing = direct_url or ""
 
+            # --- ROBUST URL NORMALIZATION & EXTRACTION ---
             if page_id and not direct_url:
                  target_name = f"Page_{page_id}"
             elif direct_url:
                  from urllib.parse import urlparse
-                 # [SEED: 2399] ROBUST DOMAIN EXTRACTION
-                 # Handles missing schemes (http://), trailing slashes, and whitespace.
-                 clean_url = direct_url.strip()
+                 
+                 # 1. Clean Input
+                 raw_input = direct_url.strip()
+                 if not raw_input:
+                     _fail_job(job_id, Exception("Empty URL provided"), stage="input_validation")
+                     raise Exception("Empty URL provided")
 
-                 # Force add https:// if no scheme is present to ensure urlparse works
-                 if not clean_url.startswith(('http://', 'https://')):
-                     clean_url = 'https://' + clean_url
+                 # 2. Force Protocol
+                 if not raw_input.startswith(('http://', 'https://')):
+                     raw_input = 'https://' + raw_input
+                 
+                 # 3. Assign Normalized Landing URL
+                 target_landing = raw_input
 
-                 parsed = urlparse(clean_url)
+                 # 4. Extract Domain for Name
+                 try:
+                     parsed = urlparse(target_landing)
+                     hostname = parsed.hostname
+                     if hostname:
+                         # Strip www. for cleaner display
+                         target_name = hostname.replace('www.', '')
+                     else:
+                         # Fallback if parsing fails completely
+                         target_name = target_landing.replace('https://', '').replace('http://', '')[:50]
+                 except Exception:
+                     target_name = target_landing[:50]
 
-                 # Extract domain, stripping 'www.' for cleaner display
-                 raw_domain = parsed.netloc.lower()
-                 if raw_domain.startswith('www.'):
-                     raw_domain = raw_domain[4:]
-
-                 # Fallback to the cleaned URL path if netloc is still somehow empty
-                 target_name = raw_domain or clean_url.replace('https://', '').replace('http://', '')[:50]
-
-            # [SEED: 2399] INTELLIGENT RESOURCE ALLOCATION GUARD (EXACT MESSAGE SPEC)
-            # Detect Big Brands and fail gracefully using standard error protocol.
-            # Uses Global BIG_BRAND_BLACKLIST defined at module level.
-
+            # --- BIG BRAND GUARD ---
             if target_landing:
                 domain_lower = target_landing.lower()
                 is_big_brand = any(wg in domain_lower for wg in BIG_BRAND_BLACKLIST)
 
                 if is_big_brand:
-                    # EXACT MESSAGE AS REQUESTED BY USER
                     msg = (
-                        f"[RESOURCE OPTIMIZATION] '{target_name}' is a large enterprise with in-house marketing and existing agencies. "
-                        "Scan is feasible, but outreach ROI is low, so compute is redirected. "
-                        "RECOMMENDATION: pivot to mid-market competitors or specialist agencies."
+                        f"[RESOURCE OPTIMIZATION] '{target_name}' is a large enterprise with in-house marketing. "
+                        "Scan aborted to save compute. Pivot to mid-market competitors."
                     )
-
-                    # Use standard _fail_job to ensure frontend handles it as "error" status
-                    # This prevents SSE crashes and displays the message clearly.
                     _fail_job(job_id, Exception(msg), stage="guard")
-                    return # Exit cleanly, saving compute
+                    raise Exception(msg)
 
             if not target_landing:
                  _fail_job(job_id, Exception("No valid landing URL provided for Direct Mode"), stage="input_validation")
-                 return
+                 raise Exception("No valid landing URL provided for Direct Mode")
 
-            # [SEED: 2399] DNS-FIRST EXISTENCE VALIDATION GATE
-            # Verifies domain resolution BEFORE attempting heavy audits.
-            # Prevents hallucinated reports for non-existent domains (e.g., 'tkijejj.com')
-            # WITHOUT rejecting valid sites protected by Cloudflare/WAF.
-            
+            # --- DNS-FIRST EXISTENCE VALIDATION WITH RETRY ---
             url_valid = False
+            last_error = None
+            
             try:
                 from urllib.parse import urlparse
                 import socket
-                
+                import time
+
                 parsed_target = urlparse(target_landing)
                 hostname = parsed_target.hostname
                 
                 if not hostname:
-                    raise ValueError("Invalid URL structure")
-                
-                # STEP 1: DNS RESOLUTION CHECK (Fastest & Most Reliable Indicator of Existence)
-                # If DNS fails (NXDOMAIN), the site definitely doesn't exist.
-                # If DNS succeeds, the site exists (even if HTTP is blocked by WAF).
-                try:
-                    socket.getaddrinfo(hostname, None)
-                    url_valid = True
-                except socket.gaierror:
-                    url_valid = False # Domain does not resolve
-                
-                # STEP 2: OPTIONAL LIGHTWEIGHT HTTP PROBE (Only if DNS passed)
-                # We don't FAIL if HTTP times out/blocks, because WAFs are common.
-                # We just note it for the report context later.
-                if url_valid:
+                    raise ValueError("Invalid URL structure: No hostname found")
+
+                # Attempt DNS Resolution up to 3 times with short delays
+                for attempt in range(3):
                     try:
-                        from curl_cffi import requests as cffi_requests
-                        # Very short timeout just to see if server responds AT ALL
-                        resp_probe = cffi_requests.head(target_landing, impersonate="chrome120", timeout=3, allow_redirects=True)
-                        # If we get here, server responded. Great.
-                    except Exception:
-                        # Server didn't respond (Timeout/Connection Refused/WAF Block).
-                        # BUT DNS worked, so we KEEP IT VALID. 
-                        # The audit will proceed, likely hitting L1/L2 errors gracefully.
-                        pass 
+                        socket.getaddrinfo(hostname, None, family=0, type=0, proto=0, flags=0)
+                        url_valid = True
+                        break
+                    except socket.gaierror as e:
+                        last_error = e
+                        if attempt < 2:
+                            time.sleep(0.5) # Brief wait before retry
+                        continue
+                    except Exception as e:
+                        last_error = e
+                        break # Non-DNS error, stop retrying
 
             except Exception as e:
-                logger.warning(f"Validation error for {target_name}: {e}")
+                last_error = e
                 url_valid = False
 
             if not url_valid:
-                _fail_job(job_id, Exception(f"Target '{target_name}' could not be resolved (DNS Failure). Please verify the URL."), stage="validation")
-                return # Exit cleanly, do NOT generate fake report
+                err_msg = f"Target '{target_name}' could not be resolved. Error: {last_error}"
+                logger.warning(err_msg)
+                _fail_job(job_id, Exception(err_msg), stage="validation")
+                raise Exception(err_msg) 
 
-            # Construct Minimal Synthetic Ad (Only if Valid)
+            # [SEED: 2399] MEANINGFUL CONTENT GATE (NEW)
+            # Verifies that the domain serves actual content, not just a parked page or error.
+            try:
+                from curl_cffi import requests as cffi_requests
+                import re as _re_gate
+                
+                # Quick probe with strict timeout
+                resp_probe = cffi_requests.get(target_landing, impersonate="chrome120", timeout=5, allow_redirects=True)
+                
+                # 1. Status Code Check
+                if resp_probe.status_code != 200:
+                     raise Exception(f"HTTP {resp_probe.status_code} - Site unreachable or error.")
+                
+                body_text = resp_probe.text
+                body_preview = body_text[:2000].lower()
+                
+                # 2. Parking Lot / Placeholder Detection
+                junk_markers = [
+                    "domain is parked", 
+                    "this domain is reserved", 
+                    "under construction", 
+                    "coming soon",
+                    "godaddy.com/domainsearch/find",
+                    "sedoparking.com",
+                    "buy-this-domain.com",
+                    "hostinger.com",
+                    "bluehost.com",
+                    "register your domain",
+                    "purchase this domain",
+                    "expired domain",
+                    "for sale"
+                ]
+                
+                if any(marker in body_preview for marker in junk_markers):
+                    raise Exception("Domain appears to be parked, expired, or for sale.")
+                    
+                # 3. Minimum Content Length Check (Reject tiny/empty pages)
+                if len(body_text) < 500:
+                    raise Exception("Page content too sparse to audit (<500 chars).")
+
+                # 4. Title/Meta Check for Generic Placeholders
+                title_match = _re_gate.search(r'<title>(.*?)</title>', body_text, _re_gate.IGNORECASE | _re_gate.DOTALL)
+                if title_match:
+                    title_val = title_match.group(1).strip().lower()
+                    generic_titles = ["home", "index", "welcome", "untitled document", "new page"]
+                    if title_val in generic_titles:
+                         # Allow if body is substantial, but warn
+                         pass 
+
+            except Exception as e:
+                err_msg = f"Target '{target_name}' failed Content Gate: {str(e)}"
+                logger.warning(err_msg)
+                _fail_job(job_id, Exception(err_msg), stage="content_gate")
+                raise Exception(err_msg)
+
+            # --- CONSTRUCT SYNTHETIC AD ---
             from ...shared.schemas import RawAd
             fake_ad = RawAd(
                 id=f"direct-{uuid.uuid4().hex[:8]}",
@@ -336,9 +412,9 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             )
 
             by_page = {target_pid: [fake_ad]}
-            ads = [fake_ad] # For context in competitor analysis if needed later
+            ads = [fake_ad]
 
-            # Enter Processing Loop Directly
+            # --- PROCESSING LOOP ---
             for page_id_iter, page_ads in by_page.items():
                 if processed >= limit: break
 
@@ -353,7 +429,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 html = None
                 discovered_emails = []
 
-                # Fast Fetch HTML for Fingerprinting & Email Discovery
+                # Fast Fetch HTML
                 if landing and landing.startswith(("http://", "https://")):
                     try:
                         from curl_cffi import requests as cffi_requests
@@ -371,53 +447,142 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                             else:
                                 if "Shopify.theme" in html: platform, conf = "shopify", 0.95
 
-                            # Extract Emails Quickly
+                            # Extract Emails
                             import re as _re
                             raw_emails = _re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
                             discovered_emails = list(set([e for e in raw_emails if not e.endswith(('.png','.jpg','.js','.css'))]))[:3]
 
-                    except Exception: pass
+                    except Exception as e:
+                        logger.debug(f"Fetch failed for {landing}: {e}")
 
                 _write_status(job_id, {"status": "running", "progress": 58, "stage": f"Auditing {page_name}: Platform {platform}"})
 
-                # [SEED: 2399] CROSS-PLATFORM TIMEOUT GUARD (Replaces SIGALRM)
-                if page.raw or html:
-                     # Ensure page.raw exists for scanners if not already populated by previous steps
-                     if not hasattr(page, 'raw') or not page.raw:
-                         page.raw = {"html": html} if html else {}
+                # [SEED: 2399] DYNAMIC TELEMETRY COLLECTION (PARITY WITH NICHE MODE)
+                # We must capture real network/browser data for L2/L3 scanners to work effectively.
 
-                     is_direct_local = bool(direct_url or page_id)
+                os.makedirs("output/_evidence", exist_ok=True)
+                snapshot_path = f"output/_evidence/{page_id_iter}.json"
+                evidence_mode = "live"
+                use_snapshot = False
 
-                     def perform_deep_scan():
-                         return l2.scan(page) + l3.scan(page)
+                # 1. Check for Cached Evidence (Optimization)
+                if os.path.exists(snapshot_path):
+                    import time as _time
+                    if _time.time() - os.path.getmtime(snapshot_path) < 86400:  # 24h cache
+                        try:
+                            with open(snapshot_path, "r", encoding="utf-8") as sf:
+                                page.raw = json.load(sf)
+                            # Reject poisoned snapshots (Cloudflare challenge, empty, WAF block)
+                            _snap_html = (page.raw.get("html") or "").lower() if isinstance(page.raw, dict) else ""
+                            _snap_poisoned = (
+                                not _snap_html
+                                or len(_snap_html) < 500
+                                or "just a moment" in _snap_html
+                                or "challenges.cloudflare.com" in _snap_html
+                                or "cdn-cgi/challenge-platform" in _snap_html
+                                or "datadome" in _snap_html
+                            )
+                            if _snap_poisoned:
+                                logger.warning(f"Discarding poisoned snapshot for {target_name} (WAF/empty)")
+                                try:
+                                    os.remove(snapshot_path)
+                                except Exception:
+                                    pass
+                            else:
+                                use_snapshot = True
+                                evidence_mode = "snapshot"
+                                logger.info(f"Using cached telemetry for {target_name}")
+                        except Exception:
+                            pass
 
-                     try:
-                         if is_direct_local:
-                             # Execute in a separate thread with a hard 20s timeout
-                             import concurrent.futures
-                             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                                 future = executor.submit(perform_deep_scan)
-                                 try:
-                                     leaks += future.result(timeout=20)
-                                 except concurrent.futures.TimeoutError:
-                                     future.cancel()
-                                     _write_status(job_id, {
-                                         "status": "running",
-                                         "progress": min(95, 75 + int(20 * processed / max(limit, 1))),
-                                         "stage": f"Timeout: Skipping deep telemetry for {page_name}"
-                                     })
-                         else:
-                             leaks += perform_deep_scan()
-                     except Exception as e:
-                         logger.error(f"Deep scan error for {page_name}: {e}")
+                # 2. Collect Live Telemetry if No Cache
+                if not use_snapshot and landing and landing.startswith(("http://", "https://")):
+                    try:
+                        from ...leak_scan.telemetry_collector import TelemetryCollector
 
+                        _write_status(job_id, {"status": "running", "progress": 65, "stage": f"Auditing {page_name}: Capturing Dynamic Telemetry..."})
+
+                        collector = TelemetryCollector()
+                        live_raw = collector.collect(landing)
+
+                        # Merge with any static HTML we already fetched (optional, but good for context)
+                        if html:
+                            live_raw["html"] = html
+
+                        page.raw = live_raw
+
+                        # Persist to Disk for Audit Trail & Future Runs
+                        with open(snapshot_path, "w", encoding="utf-8") as sf:
+                            json.dump(live_raw, sf, default=str)
+
+                        logger.info(f"Live telemetry captured for {target_name}")
+
+                    except Exception as e:
+                        logger.error(f"Telemetry collection failed for {target_name}: {e}")
+                        # Fallback: Ensure page.raw exists so scanners don't crash, even if empty
+                        if not hasattr(page, 'raw') or not page.raw:
+                            page.raw = {"html": html} if html else {}
+
+                # 3. Execute Deep Scans (L2/L3) with Timeout Protection
+                # Now page.raw contains REAL network data, so L2/L3 will find specific leaks.
+
+                def perform_deep_scan():
+                    return l2.scan(page) + l3.scan(page)
+
+                try:
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(perform_deep_scan)
+                        try:
+                            # Increased timeout to 30s to accommodate browser launch + network wait
+                            leaks += future.result(timeout=30)
+                        except concurrent.futures.TimeoutError:
+                            future.cancel()
+                            _write_status(job_id, {
+                                "status": "running",
+                                "progress": min(95, 75 + int(20 * processed / max(limit, 1))),
+                                "stage": f"Timeout: Skipping deep telemetry for {page_name}"
+                            })
+                except Exception as e:
+                    logger.error(f"Deep scan error for {page_name}: {e}")
+
+                # --- SAFE FIX GENERATION ---
                 fixes = []
+                
+                # Determine Context Keywords Safely
+                _ctx_keywords = []
+                if keyword and keyword.strip():
+                    _ctx_keywords = [keyword.strip()]
+                else:
+                    # Split domain into words: "promixnutrition.com" -> ["promix", "nutrition"]
+                    domain_parts = target_name.split('.')
+                    # Filter out TLDs and common noise
+                    clean_parts = [p for p in domain_parts if len(p) > 2 and p not in ['com', 'net', 'org', 'io', 'co']]
+                    _ctx_keywords = clean_parts if clean_parts else [target_name]
+
                 for leak in leaks:
                     try:
-                        fixes.append(forge.generate(leak, 'custom' if getattr(leak, 'tier', '') == 'L1' else platform, 0.30 if getattr(leak, 'tier', '') == 'L1' else conf, context_keywords=[keyword]))
+                        # Route to Custom for L1 to allow vertical strategy injection
+                        _plat_for_gen = 'custom' if getattr(leak, 'tier', '') == 'L1' else platform
+                        _conf_for_gen = 0.30 if getattr(leak, 'tier', '') == 'L1' else conf
+                        
+                        fix_obj = forge.generate(
+                            leak,
+                            _plat_for_gen,
+                            _conf_for_gen,
+                            context_keywords=_ctx_keywords
+                        )
+                        fixes.append(fix_obj)
+                        
                     except PlatformAmbiguousError:
-                        fixes.append(forge.generate(leak, "custom", conf))
-                    except Exception: pass
+                        # Fallback to custom if platform confidence was too low
+                        try:
+                            fixes.append(forge.generate(leak, "custom", 0.30, context_keywords=_ctx_keywords))
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        logger.error(f"Fix generation failed for leak {leak.id}: {e}")
+                        pass
 
                 pack = builder.build(page, leaks, fixes)
 
@@ -487,23 +652,21 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Enterprise Walled-Garden - Non-SMB)"})
                 continue
 
-            # [SEED: 2399] MASTER UNIVERSAL SEMANTIC GUARD (Using Global Expanded Map)
-            # No need to redefine _EXPANSION_MAP here; it's now global.
-
+            # [SEED: 2399] STRICT SEMANTIC GUARD (FIXED)
+            # Prevents false positives like "Furniture Store" appearing in "Skincare" searches.
+            
             _k_words = [w for w in keyword.lower().split() if len(w) > 2]
             _signals = list(_k_words)
             _k_clean = keyword.lower().strip()
 
-            # Check exact match first
+            # Expand signals using Global Map
             if _k_clean in _EXPANSION_MAP:
                 _signals.extend(_EXPANSION_MAP[_k_clean])
             else:
-                # Fuzzy match for compound keywords (e.g., "mental health hospital")
                 for key, vals in _EXPANSION_MAP.items():
                     if key in _k_clean or _k_clean in key:
                         _signals.extend(vals)
-
-            # Deduplicate signals
+            
             _signals = list(set(_signals))
 
             _digital_negatives = ["app", "apk", "download", "play store", "mod", "hack", "cheat", "free download", "install now", "camera app"]
@@ -513,17 +676,41 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             for ad in page_ads:
                 _ad_corpus += f" {ad.body or ''} {ad.title or ''}"
 
+            # 1. Hard Block Digital/App Entities
             if not _neg_in_keyword and any(neg in _ad_corpus for neg in _digital_negatives):
                 _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Digital/App Entity)"})
                 continue
 
-            _intent_markers = ["shop", "store", "buy", "cart", "checkout", "shipping", "boutique", "services", "agency", "clinic", "studio"]
-            _ecom_intent = any(w in _ad_corpus for w in _intent_markers)
+            # 2. STRICT RELEVANCE CHECK
             _semantic_overlap = any(sig in _ad_corpus for sig in _signals)
 
-            if not _semantic_overlap and not _ecom_intent:
-                _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Zero semantic overlap with '{keyword}')"})
-                continue
+            # 2b. [SEED: 2399] RESELLER/DISTRIBUTOR DOMAIN GUARD
+            # If page_name contains a brand token but the landing domain does not,
+            # the ad lands on a reseller/distributor (e.g. Avène -> beautycare-iq.com).
+            if landing:
+                from urllib.parse import urlparse as _urlparse_guard
+                _domain_guard = _urlparse_guard(landing).netloc.lower()
+                _name_tokens_guard = [t for t in re.split(r"[^a-z0-9]+", page_name.lower()) if len(t) > 3]
+                # Strip TLDs and generic words from page_name tokens
+                _name_tokens_guard = [t for t in _name_tokens_guard if t not in ("store", "shop", "official", "bath", "co")]
+                _domain_matches_name = any(tok in _domain_guard for tok in _name_tokens_guard)
+                if _name_tokens_guard and not _domain_matches_name:
+                    _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Reseller/Distributor domain: {_domain_guard})"})
+                    continue
+            
+            # Define specific category markers that override generic "shop" intent
+            # If the user searched for "skincare", only allow pages mentioning skincare/beauty terms.
+            # Generic "shop/store" is NO LONGER sufficient alone.
+            
+            if not _semantic_overlap:
+                # Allow ONLY if the page name/title explicitly matches the core keyword tokens
+                # e.g., Keyword "skincare" -> Page Name must contain "skin" or "care"
+                _core_tokens = [t for t in _k_words if len(t) > 3] # Use significant words only
+                _name_match = any(t in page_name.lower() for t in _core_tokens)
+                
+                if not _name_match:
+                     _write_status(job_id, {"status": "running", "progress": min(95, 35 + int(50 * processed / max(limit, 1))), "stage": f"Skipped {page_name} (Low Relevance: No Semantic Match)"})
+                     continue
 
 
             page = Page(id=page_id, name=page_name, url=landing, ads=page_ads, first_seen=datetime.now(timezone.utc))
@@ -689,8 +876,25 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                     try:
                         with open(snapshot_path, "r", encoding="utf-8") as sf:
                             page.raw = json.load(sf)
-                        use_snapshot = True
-                        evidence_mode = "snapshot"
+                        # Reject poisoned snapshots (Cloudflare challenge, empty, WAF block)
+                        _snap_html = (page.raw.get("html") or "").lower() if isinstance(page.raw, dict) else ""
+                        _snap_poisoned = (
+                            not _snap_html
+                            or len(_snap_html) < 500
+                            or "just a moment" in _snap_html
+                            or "challenges.cloudflare.com" in _snap_html
+                            or "cdn-cgi/challenge-platform" in _snap_html
+                            or "datadome" in _snap_html
+                        )
+                        if _snap_poisoned:
+                            logger.warning(f"Discarding poisoned snapshot for {page_name} (WAF/empty)")
+                            try:
+                                os.remove(snapshot_path)
+                            except Exception:
+                                pass
+                        else:
+                            use_snapshot = True
+                            evidence_mode = "snapshot"
                     except Exception:
                         pass
             if not use_snapshot and landing and not is_invalid:

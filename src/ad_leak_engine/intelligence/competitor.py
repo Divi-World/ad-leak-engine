@@ -235,19 +235,19 @@ class CompetitorIntelligence:
         }
 
 
-def get_competitor_benchmark(page_id: str, niche: str = "skincare", country: str = "CA", observed_ads: list | None = None) -> dict | None:
-    """Return evidence-based competitor benchmark.
-
-    When observed_ads are supplied, the benchmark is computed from the live
-    Playwright Ad Library pool already captured by the engine. This avoids
-    tokenless Graph API 401 bottlenecks and prevents fabricated zero counts.
-    """
+def get_competitor_benchmark(page_id: str, niche: str = "skincare", country: str = "CA", observed_ads: list | None = None, prospect_tracking_architecture: str = "UNKNOWN") -> dict | None:
+    """Return evidence-based competitor benchmark."""
     try:
         intelligence = CompetitorIntelligence()
         if observed_ads is not None:
-            return intelligence.benchmark_from_ads(page_id, niche, country, observed_ads)
+            result = intelligence.benchmark_from_ads(page_id, niche, country, observed_ads)
+            if result and isinstance(result, dict):
+                result.setdefault("metrics", {})["prospect_tracking_architecture"] = prospect_tracking_architecture
+            return result
 
         benchmark = intelligence.benchmark_prospect(page_id, niche, country)
+        if benchmark and isinstance(benchmark, dict):
+             benchmark.setdefault("metrics", {})["prospect_tracking_architecture"] = prospect_tracking_architecture
         return benchmark
     except Exception:
         return None
