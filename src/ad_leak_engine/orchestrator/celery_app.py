@@ -26,18 +26,22 @@ app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
 
-    # --- HYBRID TIMEOUT GUARDS (INDUSTRIAL GRADE) ---
-    # Niche Mode (Scraping) can take up to 3 minutes. 
-    # Direct Mode relies on INTERNAL code timeouts (concurrent.futures) to finish in <10s.
-    # Therefore, the GLOBAL Celery limit must be high enough for Niche, 
-    # but low enough to prevent zombie processes.
+    # --- HYBRID TIMEOUT GUARDS (INDUSTRIAL GRADE - ADJUSTED) ---
+    # Increased limits to accommodate heavy Playwright launches on Windows.
+    # Direct Mode: ~60-120s typical. Niche Mode: Can take 5-10 mins per batch.
     
-    # Soft limit: Warns task at 170s (allows graceful shutdown/logging)
-    task_soft_time_limit=170,
-    
-    # Hard limit: Kills task at 180s (prevents infinite hang)
-    task_time_limit=180,
+    # Soft limit: Warns task at 300s (5 mins) - allows graceful logging
+    task_soft_time_limit=300,
+
+    # Hard limit: Kills task at 360s (6 mins) - prevents infinite hang/zombies
+    task_time_limit=360,
 
     # --- TRACKING ---
     task_track_started=True,
+    
+    # --- BROKER RESILIENCE ---
+    broker_connection_retry_on_startup=True,
+    broker_transport_options={
+        "visibility_timeout": 360, # Must match task_time_limit
+    }
 )

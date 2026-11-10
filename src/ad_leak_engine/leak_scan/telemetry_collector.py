@@ -23,26 +23,26 @@ class TelemetryCollector:
         self.pricing = PricingFrictionAnalyzer()
 
     def collect(self, url: str) -> dict:
-        """[SEED: 2399] SELF-HEALING TELEMETRY ENGINE
+        """[SEED: 2399] SELF-HEALING TELEMETRY ENGINE WITH ADVANCED WAF BYPASS
         
         Strategy:
         1. Attempt Full Dynamic Probe (Playwright).
         2. If Fail/Empty, Retry once with extended timeout.
-        3. If Still Fail, Fall back to Static HTML Fetch (curl_cffi) to ensure 
-           at least basic fingerprinting/performance data exists.
+        3. If Still Fail, Fall back to Multi-Profile Stealth Fetch (curl_cffi).
+           - Tries Chrome, Safari, Firefox impersonations.
+           - Parses Static HTML for Pixel IDs to prevent 'False Negative' on L2.
         4. Never return empty dict unless URL is totally unreachable.
         """
         max_retries = 2
         last_error = None
-        
-        # --- ATTEMPT 1 & 2: Dynamic Probing ---
+
+        # --- ATTEMPT 1 & 2: Dynamic Probing (Playwright) ---
         for attempt in range(max_retries):
             try:
                 network_log = self.l2_probe.probe(url)
-                
-                # Validate Quality: Did we actually get requests?
+
                 req_count = len(network_log.get("requests", [])) if isinstance(network_log, dict) else 0
-                
+
                 if req_count > 0 or network_log.get("pixel_fired"):
                     # Success! Gather remaining telemetry
                     telemetry = self.perf.measure(url)
@@ -51,7 +51,7 @@ class TelemetryCollector:
                     telemetry.update(self.api.measure(url))
                     telemetry.update(self.saas.measure(url))
                     telemetry.update(self.pricing.measure(url))
-                    
+
                     return {"network_log": network_log, "telemetry": telemetry}
                 else:
                     # Partial Failure: Empty logs but no crash. Retry.
@@ -59,7 +59,7 @@ class TelemetryCollector:
                         import time
                         time.sleep(2) # Cool down before retry
                         continue
-                    
+
             except Exception as e:
                 last_error = e
                 if attempt < max_retries - 1:
@@ -67,31 +67,71 @@ class TelemetryCollector:
                     time.sleep(2)
                     continue
 
-        # --- FALLBACK: Static Analysis (If Dynamic Failed Completely) ---
-        # This ensures we never leave the scanner blind due to tool failure.
+        # --- FALLBACK: Advanced Stealth Static Analysis (WAF Bypass Mode) ---
+        # We try multiple browser fingerprints to evade basic bot detection
         try:
             from curl_cffi import requests as cffi_requests
-            resp = cffi_requests.get(url, impersonate="chrome120", timeout=10)
-            html = resp.text if resp.status_code == 200 else ""
+            import re as _re_static
             
-            # Construct minimal valid structure so L2/L3 don't crash
+            html = ""
+            resp_status = 0
+            
+            # Profiles to try: Chrome, Safari, Edge, Firefox
+            profiles = ["chrome120", "safari17_0", "edge101", "firefox133"]
+            
+            for profile in profiles:
+                try:
+                    resp = cffi_requests.get(
+                        url, 
+                        impersonate=profile, 
+                        timeout=15,
+                        allow_redirects=True
+                    )
+                    if resp.status_code == 200:
+                        # Check if we got a challenge page instead of real content
+                        body_preview = resp.text[:500].lower()
+                        if "cloudflare" in body_preview or "captcha" in body_preview or "just a moment" in body_preview:
+                            continue # Skip this profile, try next
+                        
+                        html = resp.text
+                        resp_status = 200
+                        break # Got clean HTML
+                except Exception:
+                    continue
+
+            if not html:
+                raise Exception("All stealth profiles failed or returned challenge pages.")
+
+            # Construct minimal valid structure
             minimal_network_log = {
                 "requests": [],
                 "pixel_fired": False,
-                "waf_blocked": False,
+                "waf_blocked": True, # Mark as WAF Blocked so L2 knows context
                 "fallback_mode": True,
-                "error_context": str(last_error) if last_error else "Dynamic probe returned empty"
+                "error_context": str(last_error) if last_error else "Dynamic probe returned empty; using static fallback."
             }
-            
-            # Run lightweight static checks
+
+            # [SEED: 2399] CRITICAL UPGRADE: Extract Pixel ID from Static HTML
+            detected_pixel_id = None
+            if html:
+                # Regex for fbq('init', 'ID')
+                m = _re_static.search(r"""fbq\s*\(\s*['"]init['"]\s*,\s*['"](\d{8,})['"]\s*\)""", html)
+                if m:
+                    detected_pixel_id = m.group(1)
+                
+                # Add this to network_log so L2 Scanner can find it
+                if detected_pixel_id:
+                    minimal_network_log["static_pixel_detected"] = True
+                    minimal_network_log["detected_pixel_id"] = detected_pixel_id
+
             perf_data = self.perf.measure_static(html) if hasattr(self.perf, 'measure_static') else {}
-            
+
             return {
                 "network_log": minimal_network_log,
                 "telemetry": perf_data,
-                "collection_status": "FALLBACK_STATIC_ONLY"
+                "collection_status": "FALLBACK_STEALTH_STATIC_SUCCESS"
             }
-            
+
         except Exception as final_e:
             # Absolute worst case: Return structured error so pipeline continues
             return {

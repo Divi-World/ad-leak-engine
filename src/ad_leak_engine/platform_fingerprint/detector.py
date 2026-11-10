@@ -7,13 +7,8 @@ from .confidence import calculate_confidence
 class PlatformDetector(AbstractPlatformDetector):
     """Detects e-commerce platform from HTML content and HTTP headers."""
 
-    def detect(self, url: str, html: str | None = None, headers: dict | None = None) -> tuple[str, float]:
-        """Return (platform_name, confidence_score).
-
-        Scans HTML content and HTTP headers for platform-specific
-        markers. Returns the platform with the highest confidence.
-        Falls back to 'custom' if no markers match.
-        """
+    def detect(self, url: str, html: str | None = None, headers: dict | None = None) -> tuple[str, float, list]:
+        """Return (platform_name, confidence_score, evidence_list)."""
         html = html or ""
         headers = headers or {}
 
@@ -21,10 +16,10 @@ class PlatformDetector(AbstractPlatformDetector):
         best_confidence = CUSTOM_CONFIDENCE
         best_evidence = []
 
+        # --- PHASE 1: Signature Matching ---
         for platform, sigs in PLATFORM_SIGNATURES.items():
             primary_hits = self._count_primary_hits(sigs["primary"], html, headers)
             secondary_hits = self._count_secondary_hits(sigs["secondary"], html, headers)
-            # [SEED: 2399] Track which markers actually matched for auditability
             matched_markers = self._collect_matched_markers(sigs["primary"] + sigs["secondary"], html, headers)
 
             confidence = calculate_confidence(primary_hits, secondary_hits)
@@ -34,17 +29,18 @@ class PlatformDetector(AbstractPlatformDetector):
                 best_platform = platform
                 best_evidence = matched_markers
 
-        # [SEED: 2399] PHASE 5.2: NEXT.JS / VERCEL DETECTION
+        # --- PHASE 2: NEXT.JS / VERCEL SPECIAL HANDLING ---
         if html:
             lower_html = html.lower()
             # Strong indicators of Next.js
             if "__next_data__" in lower_html or "_next/static" in lower_html:
-                return ("nextjs", 0.95)
-            
-            # Header-based detection hints in HTML
-            if "vercel" in lower_html and "x-vercel-id" in lower_html:
-                 return ("nextjs", 0.90)
+                # RETURN 3 ITEMS TO MATCH CONTRACT
+                return ("nextjs", 0.95, ["__next_data__ found"]) 
 
+            if "vercel" in lower_html and "x-vercel-id" in lower_html:
+                 return ("nextjs", 0.90, ["Vercel ID found"])
+
+        # Final Return: Always 3 items
         return (best_platform, best_confidence, best_evidence)
 
     def _collect_matched_markers(self, markers: list[str], html: str, headers: dict) -> list[str]:
