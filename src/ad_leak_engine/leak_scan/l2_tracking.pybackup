@@ -84,35 +84,55 @@ class L2TrackingScanner(AbstractLeakScanner):
                 sample_ev = capi_events_found[-1] if capi_events_found else "UNKNOWN"
                 capi_forensic_evidence.append(f"CAPISniff: {url} | Pixel: {capi_pixel_id} | Events: [{sample_ev}]")
 
-        # [SEED: 2399] ROBUST PIXEL ID EXTRACTION (MULTI-SOURCE)
+        # [SEED: 2399] STRICT PIXEL ID EXTRACTION (ANTI-HALLUCINATION)
         detected_browser_pixel_id = None
         
-        # Strategy 1: Extract from Network Requests (URL Params or Inline Scripts in Response Body)
+        # Determine if Browser Pixel is active first
         browser_pixel_active = pixel_fired or any("fbevents.js" in str(r.get("url","")).lower() for r in reqs if isinstance(r, dict))
 
+        pixel_context_snippet = "" # For debugging
+        
         if browser_pixel_active:
-            for r in reqs:
-                if not isinstance(r, dict): continue
-                url = str(r.get("url", ""))
-                body = str(r.get("response_body", "") or r.get("body", ""))
-                
-                # Check URL params (?id=123...)
-                m_url = _re_l2.search(r'[?&]id=(\d{8,})', url)
-                if m_url:
-                    detected_browser_pixel_id = m_url.group(1)
-                    break
-                
-                # Check Response Body for fbq('init', '123...')
-                m_body = _re_l2.search(r"fbq\s*\(\s*['\"]init['\"]\s*,\s*['\"](\d{8,})['\"]", body)
-                if m_body:
-                    detected_browser_pixel_id = m_body.group(1)
-                    break
-
-        # Strategy 2: Fallback to Page HTML if Network failed (Requires page.raw['html'])
-        if not detected_browser_pixel_id and html:
-            m_html = _re_l2.search(r"fbq\s*\(\s*['\"]init['\"]\s*,\s*['\"](\d{8,})['\"]", html)
-            if m_html:
-                detected_browser_pixel_id = m_html.group(1)
+            # STRATEGY 1: Parse HTML Source Code (Most Reliable)
+            if html:
+                m_html = _re_l2.search(r"""fbq\s*\(\s*['"]init['"]\s*,\s*['"](\d{8,})['"]\s*\)""", html)
+                if m_html:
+                    detected_browser_pixel_id = m_html.group(1)
+                    # Capture surrounding text for verification
+                    start = max(0, m_html.start() - 50)
+                    end = min(len(html), m_html.end() + 50)
+                    pixel_context_snippet = html[start:end].replace('\n', ' ')
+            
+            # STRATEGY 2: Network Body
+            if not detected_browser_pixel_id:
+                for r in reqs:
+                    if not isinstance(r, dict): continue
+                    body = str(r.get("response_body", "") or r.get("body", ""))
+                    if "fbq('init'" in body or 'fbq("init"' in body:
+                        m_body = _re_l2.search(r"""fbq\s*\(\s*['"]init['"]\s*,\s*['"](\d{8,})['"]\s*\)""", body)
+                        if m_body:
+                            detected_browser_pixel_id = m_body.group(1)
+                            start = max(0, m_body.start() - 50)
+                            end = min(len(body), m_body.end() + 50)
+                            pixel_context_snippet = body[start:end].replace('\n', ' ')
+                            break
+            
+            # STRATEGY 2: Parse Network Response Bodies (Only if HTML fails)
+            # ONLY look at responses that ARE scripts (Content-Type check implied by presence of fbq)
+            if not detected_browser_pixel_id:
+                for r in reqs:
+                    if not isinstance(r, dict): continue
+                    body = str(r.get("response_body", "") or r.get("body", ""))
+                    
+                    # Strict match: Must contain the exact init call structure
+                    if "fbq('init'" in body or 'fbq("init"' in body:
+                        m_body = _re_l2.search(r"""fbq\s*\(\s*['"]init['"]\s*,\s*['"](\d{8,})['"]\s*\)""", body)
+                        if m_body:
+                            detected_browser_pixel_id = m_body.group(1)
+                            break
+                            
+            # NOTE: We deliberately IGNORE URL parameters like ?id=123... 
+            # as these are often CDN asset IDs, not Pixel IDs.
 
         server_capi_active = capi_detected
         primary_pixel_id = capi_pixel_id or detected_browser_pixel_id
@@ -149,38 +169,58 @@ class L2TrackingScanner(AbstractLeakScanner):
 
         leaks = []
 
-        # Case 1: No Tracking At All
+        # Case 1: No Tracking At All (Or Blocked)
         if tracking_architecture == "NONE":
-            leaks.append(Leak(
-                page_id=page.id,
-                tier="L2",
-                signal="no_tracking_infrastructure",
-                severity=0.95,
-                evidence={
-                    "browser_pixel_detected": False,
-                    "server_capi_detected": False,
-                    "analyzed_requests_count": req_count,
-                    "forensic_note": "Zero FB/Meta API calls observed in network trace.",
-                    "detected_pixel_id": primary_pixel_id
-                },
-                recommendation="CRITICAL: Install Meta Pixel (Client) AND configure Server-Side CAPI (Backend)."
-            ))
+            # Heuristic: If we made many requests (>50) but found NO pixel, 
+            # it's highly likely we were blocked by a WAF or the site is JS-heavy/bot-protected.
+            is_likely_blocked = req_count > 50
             
-        # Case 2: Browser Only
+            if is_likely_blocked:
+                leaks.append(Leak(
+                    page_id=page.id,
+                    tier="L2",
+                    signal="telemetry_obstructed_bot_protection",
+                    severity=0.40, # Lower severity: Not necessarily missing, just hidden
+                    evidence={
+                        "browser_pixel_detected": False,
+                        "server_capi_detected": False,
+                        "analyzed_requests_count": req_count,
+                        "forensic_note": f"{req_count} network requests captured, but zero Meta Pixel/CAPI signatures found. High probability of WAF/Bot-blocking preventing script execution.",
+                        "detected_pixel_id": None
+                    },
+                    recommendation="INDETERMINATE: Standard scrapers may be blocked. Verify manually using Meta Pixel Helper extension in Chrome. If absent, install Pixel."
+                ))
+            else:
+                leaks.append(Leak(
+                    page_id=page.id,
+                    tier="L2",
+                    signal="no_tracking_infrastructure",
+                    severity=0.95,
+                    evidence={
+                        "browser_pixel_detected": False,
+                        "server_capi_detected": False,
+                        "analyzed_requests_count": req_count,
+                        "forensic_note": "Low request volume (<50) and zero FB/Meta API calls observed. Likely true absence of tracking.",
+                        "detected_pixel_id": None
+                    },
+                    recommendation="CRITICAL: Install Meta Pixel (Client) AND configure Server-Side CAPI (Backend)."
+                ))
+            
+        # Case 2: Browser Only (On Homepage)
         elif tracking_architecture == "BROWSER_ONLY":
             leaks.append(Leak(
                 page_id=page.id,
                 tier="L2",
-                signal="client_side_only_risk",
-                severity=0.75,
+                signal="homepage_browser_only_observation",
+                severity=0.60, # Reduced severity: CAPI might exist on Checkout, just not seen here
                 evidence={
                     "browser_pixel_detected": True,
                     "server_capi_detected": False,
-                    "risk_factor": "AdBlocker/Ios14+ Data Loss (~30-40%)",
-                    "forensic_note": "Pixel fires in browser, but NO server-side backup detected.",
+                    "risk_factor": "Potential Data Loss if CAPI is missing on Checkout",
+                    "forensic_note": "Meta Pixel detected on Homepage. Server-Side CAPI events (Purchase/AddToCart) typically fire on Checkout/Confirmation pages, which were not visited in this scan. Manual verification recommended.",
                     "detected_pixel_id": primary_pixel_id
                 },
-                recommendation="HIGH RISK: Implement Server-Side CAPI to deduplicate and recover lost events from ad-blocked users."
+                recommendation="VERIFY: Confirm Server-Side CAPI is active on your Checkout flow. If missing, implement CAPI to prevent AdBlocker data loss."
             ))
 
         # Case 3: Server Only
@@ -242,7 +282,7 @@ class L2TrackingScanner(AbstractLeakScanner):
                         "tracking_architecture": tracking_architecture,
                         "capi_sniffer_status": "ACTIVE_PARSED" if capi_events_found else "ACTIVE_URL_ONLY",
                         "detected_pixel_id": primary_pixel_id
-                    },
+                    }
                 ))
 
         return leaks
