@@ -17,6 +17,7 @@ src/ad_leak_engine/fix_forge/validation.py
 src/ad_leak_engine/fix_forge/platforms/__init__.py
 src/ad_leak_engine/fix_forge/platforms/bigcommerce.py
 src/ad_leak_engine/fix_forge/platforms/custom.py
+src/ad_leak_engine/fix_forge/platforms/nextjs_headless.py
 src/ad_leak_engine/fix_forge/platforms/shopify.py
 src/ad_leak_engine/fix_forge/platforms/woocommerce.py
 src/ad_leak_engine/ingest/__init__.py
@@ -93,10 +94,19 @@ src/ad_leak_engine/self_improve/tracker.py
 src/ad_leak_engine/self_improve/weights.py
 src/ad_leak_engine/shared/__init__.py
 src/ad_leak_engine/shared/advanced_headers.py
+src/ad_leak_engine/shared/competitor_relevance.py
 src/ad_leak_engine/shared/constants.py
+src/ad_leak_engine/shared/email_discovery.py
+src/ad_leak_engine/shared/email_tiering.py
 src/ad_leak_engine/shared/exceptions.py
+src/ad_leak_engine/shared/intent.py
 src/ad_leak_engine/shared/interfaces.py
 src/ad_leak_engine/shared/logging.py
 src/ad_leak_engine/shared/metrics.py
 src/ad_leak_engine/shared/schemas.py
+src/ad_leak_engine/shared/telemetry_language.py
 src/ad_leak_engine/shared/user_agents.py
+src/ad_leak_engine/shared/waf_bypass.py
+src/ad_leak_engine/utils/data_extractor.py
+src/ad_leak_engine/utils/managed_tor.py
+src/ad_leak_engine/utils/tor_provisioner.py

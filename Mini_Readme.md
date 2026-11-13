@@ -29,6 +29,7 @@ If you don't have Redis installed locally, the easiest way on Windows is via Doc
 
 python -c "import redis; r = redis.Redis(host='localhost', port=6379, db=0); r.flushdb(); print('Redis Flushed')"
 
+ps aux | grep celery
 
 Start the Celery Worker (in a NEW terminal):
    celery -A src.ad_leak_engine.orchestrator.celery_app worker --loglevel=info --pool=solo
@@ -41,3 +42,7 @@ Start Uvicorn (in your main backend terminal):
 cd ~/Documents/Projects/Ad-Leak-Engine
 source .venv/Scripts/activate
 clear
+
+
+Terminate the python terminal
+MSYS_NO_PATHCONV=1 taskkill /F /IM python.exe

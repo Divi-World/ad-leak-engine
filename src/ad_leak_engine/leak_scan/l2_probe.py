@@ -63,6 +63,13 @@ except ImportError:
     logger.warning("Camoufox not found. Falling back to Chromium only.")
 
 try:
+    from invisible_playwright import InvisiblePlaywright
+    INVISIBLE_AVAILABLE = True
+except ImportError:
+    INVISIBLE_AVAILABLE = False
+    logger.warning("invisible_playwright not found. Cloudflare-protected sites will fall back to Camoufox/Ghost.")
+
+try:
     from curl_cffi import requests as cffi_requests
 except ImportError:
     cffi_requests = None
@@ -777,6 +784,142 @@ class L2LiveProbe:
             return None
 
     # ------------------------------------------------------------------ #
+    # Attempt 1.5: invisible_playwright (C++-level Firefox patches)
+    # ------------------------------------------------------------------ #
+
+    def _probe_with_invisible(self, url: str) -> dict:
+        """
+        Firefox engine with C++-level fingerprint patches (not JS overrides).
+        This is the only engine that has passed Cloudflare Bot Management on
+        WebstaurantStore-class sites during diagnostics. Uses networkidle wait
+        so GTM-injected Facebook requests are captured before page closes.
+        """
+        network_log = {
+            "pixel_fired": False, "requests": [], "capi_events": [],
+            "detected_pixel_id": None, "gtm_id": None,
+            "engine_used": "invisible_playwright", "blocked_status": None,
+            "has_event_data": False, "has_initiate_checkout": False,
+            "has_add_to_cart": False, "has_purchase_event": False,
+            "has_shared_event_id": False, "has_unhashed_pii": False,
+            "fbq_events_observed": [],
+        }
+
+        if not INVISIBLE_AVAILABLE:
+            network_log["blocked_status"] = "INVISIBLE_NOT_INSTALLED"
+            return network_log
+
+        try:
+            with InvisiblePlaywright(seed=42) as browser:
+                page = browser.new_page()
+                requests_log = []
+
+                def on_request(req):
+                    requests_log.append({"url": req.url, "method": req.method, "status": None})
+
+                def on_response(response):
+                    req_url = response.url
+                    # backfill status on the matching request entry
+                    for r in reversed(requests_log):
+                        if r["url"] == req_url:
+                            r["status"] = response.status
+                            break
+                    if "facebook.com/tr" in req_url:
+                        network_log["pixel_fired"] = True
+                        try:
+                            if response.request.post_data:
+                                network_log["capi_events"].append({
+                                    "url": req_url, "event_name": "client_event",
+                                    "raw_body": response.request.post_data[:2000],
+                                })
+                        except Exception:
+                            pass
+                    if "graph.facebook.com" in req_url and "/events" in req_url:
+                        match = RE_CAPI_URL.search(req_url)
+                        if match:
+                            pid = match.group(1)
+                            network_log["capi_events"].append(
+                                {"url": req_url, "event_name": "server_event", "pixel_id": pid}
+                            )
+                            if not network_log.get("detected_pixel_id"):
+                                network_log["detected_pixel_id"] = pid
+
+                page.on("request", on_request)
+                page.on("response", on_response)
+
+                logger.info(f"[INVISIBLE] Navigating to {url}...")
+                resp = page.goto(url, wait_until="networkidle", timeout=90000)
+
+                html = page.content()
+                logger.info(f"[INVISIBLE] Loaded status={resp.status if resp else None} html_len={len(html)}")
+
+                # Strict Cloudflare detection — challenges.cloudflare.com alone is a false positive
+                title_lower = (page.title() or "").lower()
+                blocked_markers = [
+                    "just a moment",
+                    "checking your browser",
+                    "enable javascript and cookies to continue",
+                    "cf-browser-verification",
+                ]
+                cf_header = None
+                try:
+                    cf_header = resp.headers.get("cf-mitigated") if resp else None
+                except Exception:
+                    pass
+                if cf_header == "challenge" or any(m in title_lower for m in blocked_markers):
+                    network_log["blocked_status"] = "CF_CHALLENGE"
+                    logger.warning(f"[INVISIBLE] Cloudflare challenge page detected (title='{page.title()}')")
+                    return network_log
+
+                # Network-level pixel extraction (survives GTM injection)
+                if not network_log.get("detected_pixel_id"):
+                    net_pid = self._extract_pixel_id_from_network(requests_log)
+                    if net_pid:
+                        network_log["detected_pixel_id"] = net_pid
+                        network_log["pixel_fired"] = True
+                        logger.info(f"[INVISIBLE] Pixel from network: {net_pid}")
+
+                # fbq capture for event payloads
+                captures = self._wait_for_fbq_and_capture(page, requests_log, timeout=15)
+                enriched = self._analyze_fbq_captures(captures)
+                for k, v in enriched.items():
+                    if v not in (None, False, [], ""):
+                        network_log[k] = v
+                    elif k not in network_log:
+                        network_log[k] = v
+                logger.info(f"[INVISIBLE] Captured {len(captures)} fbq call(s); "
+                            f"pixel={network_log.get('detected_pixel_id')}, "
+                            f"events={enriched.get('fbq_events_observed')}")
+
+                m_gtm = RE_GTM_ID.search(html)
+                if m_gtm:
+                    network_log["gtm_id"] = m_gtm.group(0)
+
+                # Inline HTML fallback
+                fbq_m = RE_FBQ_INIT.search(html)
+                if fbq_m and not network_log.get("detected_pixel_id"):
+                    pid = fbq_m.group(1)
+                    if self._score_pixel_probability(pid, "HTML_INLINE") > 0.5:
+                        network_log["detected_pixel_id"] = pid
+                        network_log["pixel_fired"] = True
+                        logger.info(f"[INVISIBLE] Found Pixel in Inline HTML: {pid}")
+
+                if network_log.get("has_event_data"):
+                    logger.info(f"[INVISIBLE] Event coverage: "
+                                f"ATC={network_log.get('has_add_to_cart')}, "
+                                f"IC={network_log.get('has_initiate_checkout')}, "
+                                f"PUR={network_log.get('has_purchase_event')}, "
+                                f"dedup={network_log.get('has_shared_event_id')}, "
+                                f"raw_PII={network_log.get('has_unhashed_pii')}")
+
+                network_log["requests"] = requests_log
+                return network_log
+
+        except Exception as e:
+            logger.error(f"[INVISIBLE] Critical Error: {e}")
+            network_log["blocked_status"] = "ERROR"
+            return network_log
+
+    # ------------------------------------------------------------------ #
     # Attempt 2: Ghost Protocol
     # ------------------------------------------------------------------ #
 
@@ -902,7 +1045,14 @@ class L2LiveProbe:
 
                 content = page.content()
 
-                if "challenges.cloudflare.com" in content or "<title>Just a moment..." in content:
+                # Strict Cloudflare detection: challenges.cloudflare.com alone is a false positive
+                _title_ghost = (page.title() or "").lower()
+                _cf_blocked = (
+                    "<title>just a moment..." in content.lower()
+                    or "checking your browser" in content.lower()
+                    or "cf-browser-verification" in content.lower()
+                )
+                if _cf_blocked:
                     logger.warning("[GHOST] Detected CF Challenge. Initiating Human Simulation...")
                     try:
                         page.wait_for_selector("iframe[src*='challenges.cloudflare.com']", timeout=10000)
@@ -1506,6 +1656,23 @@ class L2LiveProbe:
 
         gtm_id = None
 
+        # --- TIER 1: invisible_playwright (C++-level Firefox) ---
+        if INVISIBLE_AVAILABLE:
+            logger.info(f"[SWARM] Starting invisible_playwright Probe for {url}...")
+            iw_log = self._probe_with_invisible(url)
+            if iw_log:
+                final_log.update(iw_log)
+                if iw_log.get("detected_pixel_id"):
+                    logger.info(f"[SWARM] SUCCESS via invisible_playwright! Pixel: {iw_log['detected_pixel_id']}")
+                    final_log["pixel_validation"] = self._validate_pixel_via_config(iw_log["detected_pixel_id"])
+                    final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
+                    return final_log
+                elif iw_log.get("blocked_status"):
+                    logger.warning(f"[SWARM] invisible_playwright blocked ({iw_log['blocked_status']}). Falling back.")
+                else:
+                    logger.info(f"[SWARM] invisible_playwright completed but no Pixel found. Trying Camoufox.")
+
+        # --- TIER 2: Camoufox ---
         logger.info(f"[SWARM] Starting Camoufox Probe for {url}...")
         cf_log = self._probe_with_camoufox(url)
         if cf_log:
@@ -1521,6 +1688,7 @@ class L2LiveProbe:
             else:
                 logger.info(f"[SWARM] Camoufox completed but no Pixel found. Trying Ghost Protocol.")
 
+        # --- TIER 3: Ghost Protocol ---
         logger.info(f"[SWARM] Starting Ghost Protocol for {url}...")
         ghost_log = self._probe_with_ghost_protocol(url)
 
@@ -1548,6 +1716,7 @@ class L2LiveProbe:
             if ghost_log.get("gtm_id"):
                 final_log["gtm_id"] = ghost_log["gtm_id"]
 
+        # --- TIER 4: Universal Data Extractor ---
         logger.info(f"[SWARM] Engaging Universal Data Extractor...")
         extraction_result = self.data_extractor.full_extract(url)
 
@@ -1560,6 +1729,7 @@ class L2LiveProbe:
             final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
             return final_log
 
+        # --- TIER 5: Static GTM Resolver ---
         gtm_id = final_log.get("gtm_id")
         if gtm_id:
             resolved_pixels = self._resolve_gtm_container_pixels(gtm_id, url)
@@ -1573,7 +1743,7 @@ class L2LiveProbe:
                 final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
                 return final_log
 
-        # FINAL TIER: Funnel escalation for e-commerce targets.
+        # --- TIER 6: Funnel escalation for e-commerce targets ---
         escalate = force_ecommerce or self._looks_like_ecommerce(url)
         if escalate:
             logger.info(
