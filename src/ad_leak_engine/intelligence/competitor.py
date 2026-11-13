@@ -51,6 +51,34 @@ class CompetitorIntelligence:
             pass
         return []
 
+    def _infer_creative_strategy(self, ads: list) -> str:
+        """Analyzes ad bodies/media to guess strategy."""
+        video_count = sum(1 for ad in ads if getattr(ad, "media_type", "") == "VIDEO")
+        image_count = sum(1 for ad in ads if getattr(ad, "media_type", "") == "IMAGE")
+
+        ugc_keywords = ["review", "testimonial", "unboxing", "real customer", "@"]
+        promo_keywords = ["sale", "% off", "discount", "limited time", "flash"]
+
+        text_blob = " ".join([getattr(ad, "body", "") or "" for ad in ads]).lower()
+
+        has_ugc = any(kw in text_blob for kw in ugc_keywords)
+        has_promo = any(kw in text_blob for kw in promo_keywords)
+
+        if video_count > image_count:
+            base = "Video-First"
+        elif image_count > 0:
+            base = "Static-Image"
+        else:
+            base = "Mixed/Multi-format"
+
+        modifier = ""
+        if has_ugc:
+            modifier += "+UGC/Testimonial"
+        if has_promo:
+            modifier += "+Promotional Offer"
+
+        return f"{base}{modifier}"
+
     def benchmark_from_ads(self, prospect_page_id: str, niche: str, country: str, ads: list) -> dict:
         from collections import defaultdict
         from urllib.parse import urlparse
@@ -66,6 +94,7 @@ class CompetitorIntelligence:
             "spend_lower": 0.0,
             "spend_upper": 0.0,
             "landing_urls": [],
+            "ads_sample": [],
         })
 
         for ad in ads or []:
@@ -77,6 +106,7 @@ class CompetitorIntelligence:
             entry["page_id"] = pid
             entry["page_name"] = getattr(ad, "page_name", entry["page_name"]) or entry["page_name"]
             entry["ad_count"] += 1
+            entry["ads_sample"].append(ad)
 
             status = getattr(ad, "status", "ACTIVE")
             if status == "ACTIVE":
@@ -109,6 +139,8 @@ class CompetitorIntelligence:
                 "spend_lower": round(e["spend_lower"], 2),
                 "spend_upper": round(e["spend_upper"], 2),
                 "sample_landing_urls": e["landing_urls"][:3],
+                "creative_strategy": self._infer_creative_strategy(e["ads_sample"]),
+                "ads_sample": e["ads_sample"],
             })
 
         prospect = next((s for s in stats if s["page_id"] == prospect_page_id), {
@@ -120,6 +152,8 @@ class CompetitorIntelligence:
             "spend_lower": 0.0,
             "spend_upper": 0.0,
             "sample_landing_urls": [],
+            "creative_strategy": "No active creative observed",
+            "ads_sample": [],
         })
 
         prospect_name = prospect.get("page_name") or ""
@@ -154,18 +188,29 @@ class CompetitorIntelligence:
             gap = None
             status = "no_relevant_competitors_in_observed_pool"
 
+        prospect_strategy = self._infer_creative_strategy([a for a in ads if getattr(a, "page_id", None) == prospect_page_id])
+        competitor_strategies = [
+            self._infer_creative_strategy(c["ads_sample"])
+            for c in kept_competitors
+            if "ads_sample" in c
+        ]
+
+        metrics = {
+            "prospect_ad_count": prospect_ads,
+            "avg_competitor_ads": avg_competitor_ads,
+            "total_competitor_ads": sum(valid_counts) if valid_counts else None,
+            "gap": gap,
+            "niche": niche,
+            "country": country,
+            "status": status,
+            "prospect_creative_style": prospect_strategy,
+            "top_competitor_styles": list(set(competitor_strategies))[:3],
+        }
+
         return {
             "prospect": prospect,
             "competitors": kept_competitors,
-            "metrics": {
-                "prospect_ad_count": prospect_ads,
-                "avg_competitor_ads": avg_competitor_ads,
-                "total_competitor_ads": sum(valid_counts) if valid_counts else None,
-                "gap": gap,
-                "niche": niche,
-                "country": country,
-                "status": status,
-            },
+            "metrics": metrics,
             "coverage": {
                 "observed_ads": len(ads or []),
                 "observed_pages": len(stats),

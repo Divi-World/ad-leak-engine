@@ -39,64 +39,342 @@ logger = get_logger()
 # --- GLOBAL EXPANSION MAP (Upgraded) ---
 # Used by Niche Mode Semantic Filter. Covers Consumer + Institutional + High-Value Verticals.
 _EXPANSION_MAP = {
-    # --- Existing Consumer/Commercial ---
-    "skincare": ["skin", "beauty", "dermatology", "serum", "moisturizer", "facial", "cleanser", "cosmetic"],
-    "health": ["wellness", "supplement", "fitness", "nutrition", "medical", "holistic", "vitamin", "organic"],
-    "fitness": ["gym", "workout", "training", "weight loss", "crossfit", "yoga", "pilates", "exercise"],
-    "marketing": ["seo", "agency", "digital marketing", "consulting", "b2b", "lead generation", "ppc", "branding"],
-    "ecommerce": ["shop", "store", "buy", "boutique", "retail", "fashion", "apparel", "dropshipping"],
-    "real estate": ["realty", "property", "mls", "mortgage", "homes", "realtor", "housing"],
-    "woodworking": ["carpentry", "timber", "lumber", "craftsman", "custom furniture", "woodcraft"],
-    "studio": ["photography", "portrait", "creative", "design", "agency"],
+    # =========================================================
+    # --- Existing Consumer / Commercial ---
+    # =========================================================
+    "skincare": [
+        "skin", "skin care", "beauty", "dermatology", "serum", "moisturizer",
+        "facial", "cleanser", "cosmetic", "cosmetics", "anti-aging", "esthetics",
+        "aesthetics", "glow", "acne", "sunscreen", "retinol", "spf"
+    ],
+    "health": [
+        "wellness", "supplement", "supplements", "fitness", "nutrition", "medical",
+        "holistic", "vitamin", "vitamins", "organic", "alternative medicine",
+        "protein", "keto", "weight loss", "mental health", "telehealth", "dental"
+    ],
+    "fitness": [
+        "gym", "workout", "training", "weight loss", "crossfit", "yoga", "pilates",
+        "exercise", "personal trainer", "bodybuilding", "health", "nutrition",
+        "home gym", "running", "cycling", "martial arts"
+    ],
+    "marketing": [
+        "seo", "agency", "digital marketing", "consulting", "b2b", "lead generation",
+        "ppc", "branding", "smm", "growth hacking", "social media", "content marketing",
+        "email marketing", "copywriting", "advertising", "pr", "public relations",
+        "affiliate marketing", "influencer marketing", "analytics"
+    ],
+    "ecommerce": [
+        "shop", "store", "buy", "boutique", "retail", "fashion", "apparel",
+        "dropshipping", "shopify", "d2c", "direct to consumer", "wholesale",
+        "ecom", "online store", "marketplace", "subscription box", "print on demand"
+    ],
+    "real estate": [
+        "realty", "property", "mls", "mortgage", "homes", "realtor", "housing",
+        "property management", "homes for sale", "rentals", "airbnb", "vrbo",
+        "real estate investing", "flip", "commercial real estate", "land", "condo"
+    ],
+    "woodworking": [
+        "carpentry", "timber", "lumber", "craftsman", "custom furniture", "woodcraft",
+        "joinery", "cabinet making", "woodturning", "furniture making"
+    ],
+    "studio": [
+        "photography", "portrait", "creative", "design", "agency", "videography",
+        "recording studio", "dance studio", "art studio", "production studio"
+    ],
 
-    # --- [SEED: 2399] MISSING CONSUMER VERTICALS (ADDED) ---
-    "home": ["home decor", "home improvement", "furniture", "interior design", "homeware",
-             "home goods", "furnishings", "home accessories", "kitchenware", "bedding"],
-    "fashion": ["clothing", "apparel", "boutique", "streetwear", "luxury fashion", "accessories",
-                "shoes", "handbags", "jewelry", "watches", "sunglasses"],
-    "beauty": ["makeup", "cosmetics", "lipstick", "foundation", "beauty salon", "nail salon",
-               "hair salon", "beauty supply", "fragrance", "perfume"],
-    "pets": ["pet supplies", "pet food", "dog training", "veterinary", "pet grooming",
-             "pet insurance", "cat litter", "dog toys", "pet adoption"],
-    "gaming": ["video games", "esports", "gaming pc", "console", "game server", "mobile game",
-               "gaming chair", "streaming", "gaming mouse", "gaming keyboard"],
-    "crypto": ["bitcoin", "ethereum", "blockchain", "web3", "crypto exchange", "nft", "defi", "wallet"],
-    "gambling": ["casino", "sportsbook", "betting", "poker", "lottery", "online casino", "slots"],
-    "dating": ["dating app", "singles", "matchmaking", "hookup", "relationship", "dating site"],
-    "wedding": ["wedding planning", "bridal", "wedding dress", "wedding venue",
-                "wedding photographer", "engagement ring", "wedding invitation"],
-    "baby": ["baby products", "stroller", "diapers", "maternity", "parenting", "toddler",
-             "nursery", "baby food", "baby monitor"],
-    "sports": ["sports equipment", "athletic wear", "team sports", "sports betting",
-               "sports nutrition", "sports memorabilia", "sports apparel"],
-    "food": ["food delivery", "meal kit", "grocery", "snack", "coffee", "tea",
-             "supplement drink", "wine", "spirits", "bakery"],
-    "electronics": ["smartphone", "laptop", "headphones", "smartwatch", "tv", "camera",
-                    "drone", "gadget", "tablet", "speaker"],
-    "nonprofit": ["charity", "donation", "fundraising", "ngo", "foundation", "volunteer", "social cause"],
+    # =========================================================
+    # --- Consumer Verticals (expanded from Map 2) ---
+    # =========================================================
+    "home": [
+        "home decor", "home improvement", "furniture", "interior design", "homeware",
+        "home goods", "furnishings", "home accessories", "kitchenware", "bedding",
+        "landscaping", "plumbing", "hvac", "roofing", "contractor", "remodeling",
+        "decor", "cleaning", "pest control", "electrical", "painting", "flooring",
+        "windows", "garage door", "solar", "pool"
+    ],
+    "fashion": [
+        "clothing", "apparel", "boutique", "streetwear", "luxury fashion", "accessories",
+        "shoes", "handbags", "jewelry", "watches", "sunglasses", "sneakers", "footwear",
+        "menswear", "womenswear", "kids fashion", "swimwear", "activewear", "denim"
+    ],
+    "beauty": [
+        "makeup", "cosmetics", "lipstick", "foundation", "beauty salon", "nail salon",
+        "hair salon", "beauty supply", "fragrance", "perfume", "salon", "spa",
+        "hair extensions", "lashes", "microblading", "botox", "fillers", "medspa",
+        "tanning", "barber", "waxing", "eyebrows"
+    ],
+    "pets": [
+        "pet supplies", "pet food", "dog training", "veterinary", "pet grooming",
+        "pet insurance", "cat litter", "dog toys", "pet adoption", "vet", "pet sitting",
+        "dog walking", "kennel", "cattery", "animal rescue", "pet trainer",
+        "aquarium", "reptile", "pet pharmacy"
+    ],
+    "gaming": [
+        "video games", "esports", "gaming pc", "console", "game server", "mobile game",
+        "gaming chair", "streaming", "gaming mouse", "gaming keyboard", "vr", "metaverse",
+        "game development", "twitch", "gaming monitor", "gaming headset"
+    ],
+    "crypto": [
+        "bitcoin", "ethereum", "blockchain", "web3", "crypto exchange", "nft", "defi",
+        "wallet", "altcoin", "mining", "staking", "smart contract", "token", "dao",
+        "crypto trading", "cold storage"
+    ],
+    "gambling": [
+        "casino", "sportsbook", "betting", "poker", "lottery", "online casino", "slots",
+        "blackjack", "roulette", "fantasy sports", "horse racing", "bingo"
+    ],
+    "dating": [
+        "dating app", "singles", "matchmaking", "hookup", "relationship", "dating site",
+        "speed dating", "dating coach", "over 50 dating", "christian dating"
+    ],
+    "wedding": [
+        "wedding planning", "bridal", "wedding dress", "wedding venue",
+        "wedding photographer", "engagement ring", "wedding invitation",
+        "wedding catering", "wedding dj", "honeymoon", "wedding cake", "wedding florist"
+    ],
+    "baby": [
+        "baby products", "stroller", "diapers", "maternity", "parenting", "toddler",
+        "nursery", "baby food", "baby monitor", "baby formula", "baby clothes",
+        "car seat", "breastfeeding", "baby shower"
+    ],
+    "sports": [
+        "sports equipment", "athletic wear", "team sports", "sports betting",
+        "sports nutrition", "sports memorabilia", "sports apparel", "golf", "tennis",
+        "soccer", "basketball", "baseball", "football", "hockey", "surfing", "skiing"
+    ],
+    "food": [
+        "food delivery", "meal kit", "grocery", "snack", "snacks", "coffee", "tea",
+        "supplement drink", "wine", "spirits", "bakery", "restaurant", "cafe",
+        "catering", "meal prep", "beverage", "brewery", "winery", "vegan", "organic food",
+        "pizza", "sushi", "bbq", "dessert"
+    ],
+    "electronics": [
+        "smartphone", "laptop", "headphones", "smartwatch", "tv", "camera",
+        "drone", "gadget", "tablet", "speaker", "earbuds", "monitor", "printer",
+        "router", "charger", "smart home", "wearable"
+    ],
+    "nonprofit": [
+        "charity", "donation", "fundraising", "ngo", "foundation", "volunteer",
+        "social cause", "crowdfunding", "philanthropy", "grant writing", "nonprofit marketing"
+    ],
 
-    # --- Institutional & High-Value Verticals (NEW) ---
-    "hospital": ["hospital marketing", "patient acquisition", "health system advertising", "telehealth",
-                 "urgent care", "specialty clinic", "medical group", "hospital recruitment"],
-    "clinic": ["dental clinic", "dermatology clinic", "fertility clinic", "physical therapy",
-               "chiropractic", "veterinary clinic", "med spa"],
-    "school": ["school enrollment", "charter school marketing", "private school admissions",
-               "K12 recruitment", "after school program", "school choice", "tutoring"],
-    "university": ["university admissions", "higher ed marketing", "online degree", "college enrollment",
-                   "graduate program", "continuing education", "student recruitment", "campus tour"],
-    "government": ["public health campaign", "government recruitment", "municipal services",
-                   "public transit", "social services", "civic engagement", "government procurement"],
-    "recruitment": ["employer branding", "job advertising", "talent acquisition", "staffing agency",
-                    "healthcare recruiting", "education recruiting"],
+    # =========================================================
+    # --- Institutional & High-Value Verticals ---
+    # =========================================================
+    "hospital": [
+        "hospital marketing", "patient acquisition", "health system advertising", "telehealth",
+        "urgent care", "specialty clinic", "medical group", "hospital recruitment",
+        "healthcare marketing", "patient experience", "hospital it"
+    ],
+    "clinic": [
+        "dental clinic", "dermatology clinic", "fertility clinic", "physical therapy",
+        "chiropractic", "veterinary clinic", "med spa", "urgent care clinic",
+        "behavioral health", "pain management", "orthopedic clinic", "eye clinic"
+    ],
+    "school": [
+        "school enrollment", "charter school marketing", "private school admissions",
+        "K12 recruitment", "after school program", "school choice", "tutoring",
+        "school marketing", "school software", "school safety", "edtech k12"
+    ],
+    "university": [
+        "university admissions", "higher ed marketing", "online degree", "college enrollment",
+        "graduate program", "continuing education", "student recruitment", "campus tour",
+        "study abroad", "mba", "phd", "community college"
+    ],
+    "government": [
+        "public health campaign", "government recruitment", "municipal services",
+        "public transit", "social services", "civic engagement", "government procurement",
+        "govtech", "public safety", "defense", "e-government"
+    ],
+    "recruitment": [
+        "employer branding", "job advertising", "talent acquisition", "staffing agency",
+        "healthcare recruiting", "education recruiting", "recruiting software", "ats",
+        "executive search", "temp agency", "hr tech"
+    ],
 
-    # --- Other High-Spend Verticals (NEW) ---
-    "finance": ["bank", "insurance", "fintech", "accounting", "tax prep", "wealth management", "lending"],
-    "legal": ["law firm", "attorney", "personal injury", "immigration lawyer", "family law", "estate planning"],
-    "automotive": ["car dealership", "auto repair", "car rental", "ev charging", "auto insurance", "car"],
-    "travel": ["hotel", "resort", "airline", "travel agency", "vacation rental", "tour operator"],
-    "restaurant": ["restaurant", "cafe", "catering", "food delivery", "bakery", "bar"],
-    "home_services": ["plumbing", "roofing", "hvac", "landscaping", "cleaning service", "pest control"],
-    "education_k12": ["tutoring", "test prep", "homeschool", "summer camp", "language school"]
+    # =========================================================
+    # --- Other High-Spend Verticals ---
+    # =========================================================
+    "finance": [
+        "bank", "insurance", "fintech", "accounting", "tax prep", "wealth management",
+        "lending", "bookkeeping", "financial advisor", "loans", "credit repair", "forex",
+        "investing", "stocks", "trading", "retirement", "cpa", "payroll", "crypto finance"
+    ],
+    "legal": [
+        "law firm", "attorney", "personal injury", "immigration lawyer", "family law",
+        "estate planning", "criminal defense", "divorce lawyer", "bankruptcy",
+        "business law", "dui", "workers compensation", "patent", "legal software"
+    ],
+    "automotive": [
+        "car dealership", "auto repair", "car rental", "ev charging", "auto insurance",
+        "car", "detailing", "tires", "motorcycle", "rv", "boat", "marine", "powersports",
+        "car wash", "auto parts", "used cars", "leasing", "trucking"
+    ],
+    "travel": [
+        "hotel", "resort", "airline", "travel agency", "vacation rental", "tour operator",
+        "cruise", "booking", "flights", "car rental travel", "travel insurance",
+        "destination wedding", "safari", "backpacking", "all inclusive"
+    ],
+    "restaurant": [
+        "restaurant", "cafe", "catering", "food delivery", "bakery", "bar",
+        "bistro", "fast food", "fine dining", "food truck", "pub", "coffee shop",
+        "restaurant pos", "restaurant marketing"
+    ],
+    "home_services": [
+        "plumbing", "roofing", "hvac", "landscaping", "cleaning service", "pest control",
+        "electrician", "handyman", "garage door", "flooring", "painting service",
+        "window replacement", "gutter", "chimney", "locksmith", "mold removal"
+    ],
+    "education_k12": [
+        "tutoring", "test prep", "homeschool", "summer camp", "language school",
+        "sat prep", "act prep", "private tutor", "stem education", "coding for kids",
+        "montessori", "special education"
+    ],
+
+    # =========================================================
+    # --- NEW: Technology / B2B SaaS (from Map 2 + expanded) ---
+    # =========================================================
+    "tech": [
+        "saas", "software", "startup", "ai", "artificial intelligence", "cloud",
+        "cybersecurity", "fintech", "web3", "crypto", "machine learning", "data analytics",
+        "devops", "api", "automation", "no code", "low code", "it services", "managed it",
+        "erp", "crm", "hr software", "martech", "adtech", "biotech", "quantum"
+    ],
+
+    # =========================================================
+    # --- NEW: Auto (alias merged above; kept for backward compat)
+    # =========================================================
+    "auto": [
+        "car dealership", "auto repair", "detailing", "tires", "motorcycle", "rv",
+        "boat", "marine", "powersports", "car wash", "used cars", "auto parts",
+        "ev charging", "auto insurance"
+    ],
+
+    # =========================================================
+    # --- NEW: Education (generic; K12/university split above) ---
+    # =========================================================
+    "education": [
+        "tutoring", "online course", "coaching", "bootcamp", "language learning",
+        "test prep", "certification", "edtech", "homeschool", "online degree",
+        "mooc", "learning management system", "lms", "study abroad", "upskilling"
+    ],
+
+    # =========================================================
+    # --- NEW: Pet (singular alias; merged with "pets" above) ---
+    # =========================================================
+    "pet": [
+        "dog grooming", "vet", "pet sitting", "dog walking", "pet food", "pet supplies",
+        "kennel", "cattery", "animal rescue", "pet trainer", "pet insurance",
+        "pet adoption", "veterinary"
+    ],
+
+    # =========================================================
+    # --- NEW: Personal Care (merged from duplicate personal/personal care)
+    # =========================================================
+    "personal care": [
+        "skincare", "beauty", "cosmetics", "hair care", "body care", "oral care",
+        "wellness", "organic", "natural", "bath", "grooming", "hygiene", "moisturizer",
+        "shampoo", "soap", "lotion", "cream", "serum", "facial", "cleanser",
+        "deodorant", "toothpaste", "razor", "sunscreen", "conditioner", "body wash"
+    ],
+
+    # =========================================================
+    # --- NEW: Media / Entertainment / Publishing (gap fill) ---
+    # =========================================================
+    "media": [
+        "entertainment", "streaming", "film", "music", "podcast", "publishing",
+        "news", "magazine", "radio", "television", "production", "content creator",
+        "youtube", "tiktok", "advertising media", "ott", "cinema"
+    ],
+
+    # =========================================================
+    # --- NEW: Energy / Utilities (gap fill) ---
+    # =========================================================
+    "energy": [
+        "solar", "renewable energy", "electricity", "oil and gas", "wind energy",
+        "battery", "ev charging", "utility", "power plant", "energy efficiency",
+        "nuclear", "hydrogen", "grid"
+    ],
+
+    # =========================================================
+    # --- NEW: Logistics / Supply Chain (gap fill) ---
+    # =========================================================
+    "logistics": [
+        "shipping", "freight", "warehousing", "supply chain", "trucking",
+        "last mile delivery", "fulfillment", "3pl", "courier", "cargo",
+        "fleet management", "customs", "cold chain"
+    ],
+
+    # =========================================================
+    # --- NEW: Manufacturing / Industrial (gap fill) ---
+    # =========================================================
+    "manufacturing": [
+        "industrial", "factory", "machinery", "cnc", "3d printing", "robotics",
+        "automation industrial", "metal fabrication", "plastics", "packaging",
+        "quality control", "lean manufacturing", "oem", "supplier"
+    ],
+
+    # =========================================================
+    # --- NEW: Agriculture (gap fill) ---
+    # =========================================================
+    "agriculture": [
+        "farming", "agtech", "crops", "livestock", "dairy", "agriculture equipment",
+        "irrigation", "fertilizer", "seeds", "greenhouse", "organic farming",
+        "precision agriculture", "harvest"
+    ],
+
+    # =========================================================
+    # --- NEW: Insurance (standalone high-spend vertical) ---
+    # =========================================================
+    "insurance": [
+        "auto insurance", "home insurance", "life insurance", "health insurance",
+        "renters insurance", "pet insurance", "business insurance", "travel insurance",
+        "disability insurance", "umbrella policy", "insurance broker", "claims"
+    ],
+
+    # =========================================================
+    # --- NEW: Construction / Trades (gap fill) ---
+    # =========================================================
+    "construction": [
+        "general contractor", "construction company", "building", "renovation",
+        "commercial construction", "residential construction", "civil engineering",
+        "architecture", "surveying", "concrete", "steel", "heavy equipment"
+    ],
+
+    # =========================================================
+    # --- NEW: Professional Services (gap fill) ---
+    # =========================================================
+    "professional services": [
+        "consulting", "accounting firm", "law firm", "it consulting", "management consulting",
+        "hr consulting", "marketing agency", "design agency", "engineering services",
+        "architecture firm", "bookkeeping", "business coaching"
+    ],
+
+    # =========================================================
+    # --- NEW: Retail (general, distinct from ecommerce) ---
+    # =========================================================
+    "retail": [
+        "retail store", "shopping mall", "department store", "supermarket",
+        "convenience store", "specialty retail", "retail pos", "inventory",
+        "point of sale", "brick and mortar", "franchise"
+    ],
+
+    # =========================================================
+    # --- NEW: Environment / Sustainability (gap fill) ---
+    # =========================================================
+    "environment": [
+        "sustainability", "recycling", "waste management", "water treatment",
+        "clean energy", "climate", "carbon offset", "esg", "environmental services",
+        "conservation"
+    ],
+
+    # =========================================================
+    # --- NEW: Telecom (gap fill) ---
+    # =========================================================
+    "telecom": [
+        "mobile carrier", "internet provider", "isp", "broadband", "5g", "voip",
+        "phone plans", "fiber", "satellite internet", "telecom equipment"
+    ]
 }
 
 # [SEED: 2399] GLOBAL BIG BRAND BLACKLIST
@@ -408,8 +686,8 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 raise Exception(err_msg) 
 
             # [SEED: 2399] RESILIENT CONTENT GATE (UPGRADED FOR LATENCY)
-            # Verifies that the domain serves actual content, not just a parked page or error.
-            # Handles slow TTFB and partial downloads gracefully without killing valid SMB scans.
+            # [SEED: 2399] SUPER-HYBRID CONTENT GATE (NETWORK-RESILIENT + WAF-AWARE)
+            # Combines industrial-grade timeout/retry logic with intelligent WAF tolerance.
             try:
                 from curl_cffi import requests as cffi_requests
                 import re as _re_gate
@@ -417,27 +695,44 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
 
                 max_retries = 2
                 resp_probe = None
-                
+                waf_detected = False
+
                 for attempt in range(max_retries):
                     try:
-                        # Increased timeout to 15s to accommodate heavy Shopify/WooCommerce loads
-                        # Added connect_timeout separately to distinguish DNS/Connect failures from Read timeouts
+                        # INDUSTRIAL GRADE: Granular timeouts prevent hanging
                         resp_probe = cffi_requests.get(
-                            target_landing, 
-                            impersonate="chrome120", 
+                            target_landing,
+                            impersonate="chrome120",
                             timeout=(10, 15), # (connect_timeout, read_timeout)
                             allow_redirects=True
                         )
-                        break # Success on first try usually
+                        
+                        # SUCCESS ON FIRST TRY IF STATUS < 400 OR IF IT'S A KNOWN WAF BLOCK
+                        if resp_probe.status_code < 400:
+                            break 
+                        elif resp_probe.status_code in [403, 405, 429, 503]:
+                            # WAF/BOT PROTECTION DETECTED. Do NOT retry immediately. 
+                            # Break loop to let TelemetryCollector handle the bypass.
+                            logger.warning(f"[GATE] WAF Block Detected (HTTP {resp_probe.status_code}) on {target_name}. Delegating to Stealth Collector.")
+                            waf_detected = True
+                            break
+                        else:
+                            # Other 4xx/5xx errors might be transient or permanent. Retry once.
+                            if attempt < max_retries - 1:
+                                _time_gate.sleep(1)
+                                continue
+                            else:
+                                raise Exception(f"HTTP {resp_probe.status_code} - Server Error after retries.")
+                                
                     except cffi_requests.exceptions.Timeout:
                         if attempt < max_retries - 1:
                             _time_gate.sleep(1) # Brief backoff
                             continue
                         else:
-                            raise # Re-raise if final attempt fails
+                            raise Exception("Connection Timed Out (Slow Server)")
                     except cffi_requests.exceptions.ConnectionError:
                         # Connection refused/reset usually means dead site, fail fast
-                        raise
+                        raise Exception("Network Unreachable (DNS/Refused)")
                     except Exception as net_err:
                         # Other network glitches, retry once
                         if attempt < max_retries - 1:
@@ -449,46 +744,53 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 if resp_probe is None:
                      raise Exception("Failed to establish connection after retries.")
 
-                # 1. Status Code Check
-                if resp_probe.status_code >= 400:
-                     raise Exception(f"HTTP {resp_probe.status_code} - Site unreachable or error.")
+                # --- VALIDATION LOGIC ---
+                
+                # 1. If WAF was detected, we SKIP the parking/content checks below.
+                # We trust the TelemetryCollector to get past the wall.
+                if not waf_detected:
+                    
+                    # 2. Parking Lot / Placeholder Detection (Only if we got real HTML)
+                    body_text = resp_probe.text
+                    body_preview = body_text[:2000].lower()
 
-                body_text = resp_probe.text
-                body_preview = body_text[:2000].lower()
+                    junk_markers = [
+                        "domain is parked",
+                        "this domain is reserved",
+                        "under construction",
+                        "coming soon",
+                        "godaddy.com/domainsearch/find",
+                        "sedoparking.com",
+                        "buy-this-domain.com",
+                        "hostinger.com",
+                        "bluehost.com",
+                        "register your domain",
+                        "purchase this domain",
+                        "expired domain",
+                        "for sale"
+                    ]
 
-                # 2. Parking Lot / Placeholder Detection
-                junk_markers = [
-                    "domain is parked",
-                    "this domain is reserved",
-                    "under construction",
-                    "coming soon",
-                    "godaddy.com/domainsearch/find",
-                    "sedoparking.com",
-                    "buy-this-domain.com",
-                    "hostinger.com",
-                    "bluehost.com",
-                    "register your domain",
-                    "purchase this domain",
-                    "expired domain",
-                    "for sale"
-                ]
+                    if any(marker in body_preview for marker in junk_markers):
+                        raise Exception("Domain appears to be parked, expired, or for sale.")
 
-                if any(marker in body_preview for marker in junk_markers):
-                    raise Exception("Domain appears to be parked, expired, or for sale.")
+                    # 3. Minimum Content Length Check (Reject tiny/empty pages)
+                    if len(body_text) < 500:
+                        raise Exception("Page content too sparse to audit (<500 chars).")
 
-                # 3. Minimum Content Length Check (Reject tiny/empty pages)
-                # Note: If we got here, we likely downloaded something substantial unless it's a redirect loop
-                if len(body_text) < 500:
-                    raise Exception("Page content too sparse to audit (<500 chars).")
-
-                # 4. Title/Meta Check for Generic Placeholders
-                title_match = _re_gate.search(r'<title>(.*?)</title>', body_text, _re_gate.IGNORECASE | _re_gate.DOTALL)
-                if title_match:
-                    title_val = title_match.group(1).strip().lower()
-                    generic_titles = ["home", "index", "welcome", "untitled document", "new page"]
-                    if title_val in generic_titles:
-                         # Allow if body is substantial, but warn
-                         pass
+                    # 4. Title/Meta Check for Generic Placeholders
+                    title_match = _re_gate.search(r'<title>(.*?)</title>', body_text, _re_gate.IGNORECASE | _re_gate.DOTALL)
+                    if title_match:
+                        title_val = title_match.group(1).strip().lower()
+                        generic_titles = ["home", "index", "welcome", "untitled document", "new page"]
+                        if title_val in generic_titles:
+                             # Allow if body is substantial, but warn
+                             pass
+                
+                # If we reach here, either:
+                # A) Site is healthy (200 OK) -> Proceed to Scan
+                # B) Site is WAF Blocked (403/503) -> Proceed to Scan (TelemetryCollector will bypass)
+                
+                logger.info(f"[GATE] Passed for {target_name}. Status: {'WAF_BLOCKED_DELEGATED' if waf_detected else 'HEALTHY'}")
 
             except Exception as e:
                 err_msg = f"Target '{target_name}' failed Content Gate: {str(e)}"
@@ -610,6 +912,50 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
 
                         page.raw = live_raw
 
+                        # Fallback Platform Detection via Network Traffic if HTML Fetch Failed
+                        if platform == "custom" and conf < 0.5:
+                            _nlog_check = live_raw.get("network_log", {})
+                            _reqs_check = _nlog_check.get("requests", [])
+                            if any("cdn.shopify.com" in r.get("url", "") for r in _reqs_check if isinstance(r, dict)):
+                                platform = "shopify"
+                                conf = 0.85 # Slightly lower than 0.95 as we lack Pixel confirmation
+                                logger.info("Fallback Platform Detection: Shopify detected via Network CDN traffic.")
+
+                        # [SEED: 2399] CROSS-SIGNAL PLATFORM UPGRADE (PIXEL + THEME EVIDENCE)
+                        try:
+                            _nlog = live_raw.get("network_log", {})
+                            _detected_pixel_id = _nlog.get("detected_pixel_id")
+                            
+                            # NEW: Check Network Requests for Shopify CDN signatures even if HTML fetch failed
+                            _reqs = _nlog.get("requests", [])
+                            _has_shopify_cdn_signal = any("cdn.shopify.com" in r.get("url", "") for r in _reqs if isinstance(r, dict))
+
+                            if _detected_pixel_id:
+                                # Check if we have Shopify signals in the raw HTML OR Network Requests
+                                _html_for_upgrade = live_raw.get("html", "") or html or ""
+                                _has_shopify_html_signal = (
+                                    "shopify.theme" in _html_for_upgrade.lower() or
+                                    "cdn.shopify.com" in _html_for_upgrade.lower() or
+                                    "myshopify.com" in _html_for_upgrade.lower()
+                                )
+                                
+                                # Combine signals: HTML Signal OR Network CDN Signal
+                                if _has_shopify_html_signal or _has_shopify_cdn_signal:
+                                    _prev_platform, _prev_conf = platform, conf
+                                    platform = "shopify"
+                                    conf = 0.95
+                                    if not any("Pixel + Theme" in str(e) for e in platform_evidence):
+                                        evidence_src = "HTML" if _has_shopify_html_signal else "Network CDN"
+                                        platform_evidence.append(
+                                            f"Pixel ID {_detected_pixel_id} + Shopify {evidence_src} markers"
+                                        )
+                                    logger.info(
+                                        f"Upgraded platform confidence to Shopify (0.95) due to Pixel + {evidence_src} Signals. "
+                                        f"Pixel ID={_detected_pixel_id}; previous={_prev_platform}/{_prev_conf}."
+                                    )
+                        except Exception as _upgrade_err:
+                            logger.debug(f"Cross-signal platform upgrade skipped: {_upgrade_err}")
+
                         # Persist to Disk for Audit Trail & Future Runs
                         with open(snapshot_path, "w", encoding="utf-8") as sf:
                             json.dump(live_raw, sf, default=str)
@@ -621,6 +967,63 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                         # Fallback: Ensure page.raw exists so scanners don't crash, even if empty
                         if not hasattr(page, 'raw') or not page.raw:
                             page.raw = {"html": html} if html else {}
+
+                # [SEED: 2399] CROSS-SIGNAL PLATFORM UPGRADE (PIXEL + THEME EVIDENCE)
+                # If the L2 telemetry layer discovered a live Meta Pixel ID, that is
+                # strong independent evidence of the underlying stack. Combine with
+                # Shopify theme markers to override weak/missed fast-fetch fingerprints.
+                # Runs before deep scan / fix generation so downstream routing benefits.
+                try:
+                    _raw_for_upgrade = page.raw if isinstance(page.raw, dict) else {}
+                    # Support both flat and nested network_log shapes defensively.
+                    _nlog = {}
+                    if isinstance(_raw_for_upgrade.get("network_log"), dict):
+                        _nlog = _raw_for_upgrade.get("network_log") or {}
+                    elif _raw_for_upgrade.get("detected_pixel_id") or _raw_for_upgrade.get("pixel_fired"):
+                        _nlog = _raw_for_upgrade
+
+                    _detected_pixel_id = _nlog.get("detected_pixel_id")
+                    if _detected_pixel_id:
+                        # Combine HTML sources: live_raw html override, snapshot html, fast-fetch html
+                        _html_for_upgrade = (
+                            (_raw_for_upgrade.get("html") or "")
+                            or (html or "")
+                        )
+                        _html_lower_upgrade = _html_for_upgrade.lower()
+                        # Check network requests for Shopify CDN signatures (parity with inline block)
+                        _reqs_for_upgrade = _nlog.get("requests", []) or []
+                        _has_shopify_cdn_signal = any(
+                            "cdn.shopify.com" in (r.get("url", "") if isinstance(r, dict) else "")
+                            for r in _reqs_for_upgrade
+                        )
+                        if (
+                            "shopify.theme" in _html_lower_upgrade
+                            or "cdn.shopify.com" in _html_lower_upgrade
+                            or _has_shopify_cdn_signal
+                        ):
+                            _prev_platform, _prev_conf = platform, conf
+                            platform = "shopify"
+                            conf = 0.95
+                            if not any("Pixel + Theme" in str(e) for e in platform_evidence):
+                                platform_evidence.append(
+                                    f"Pixel ID {_detected_pixel_id} + Shopify theme/CDN markers"
+                                )
+                            logger.info(
+                                f"Upgraded platform confidence to Shopify (0.95) due to Pixel + Theme Signals. "
+                                f"Pixel ID={_detected_pixel_id}; previous={_prev_platform}/{_prev_conf}."
+                            )
+                        else:
+                            logger.debug(
+                                f"Pixel ID {_detected_pixel_id} detected but no Shopify theme/CDN markers; "
+                                f"keeping platform={platform} conf={conf}."
+                            )
+                    elif _nlog.get("pixel_fired"):
+                        logger.debug(
+                            f"Pixel activity observed for {target_name} but no ID extracted; "
+                            f"no platform upgrade applied."
+                        )
+                except Exception as _upgrade_err:
+                    logger.debug(f"Cross-signal platform upgrade skipped for {target_name}: {_upgrade_err}")
 
                 # 3. Execute Deep Scans (L2/L3) with Timeout Protection
                 # Now page.raw contains REAL network data, so L2/L3 will find specific leaks.
@@ -1007,6 +1410,51 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                     _write_status(job_id, {"status": "running", "progress": min(95, 45 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: L2/L3 telemetry captured (live)"})
                 except Exception:
                     pass
+
+            # [SEED: 2399] CROSS-SIGNAL PLATFORM UPGRADE (NICHE MODE PARITY)
+            # Mirrors Branch 1 logic so niche-mode pages also benefit from
+            # pixel+theme evidence when the fast fingerprint missed or under-scored.
+            try:
+                _raw_for_upgrade = page.raw if isinstance(page.raw, dict) else {}
+                _nlog = {}
+                if isinstance(_raw_for_upgrade.get("network_log"), dict):
+                    _nlog = _raw_for_upgrade.get("network_log") or {}
+                elif _raw_for_upgrade.get("detected_pixel_id") or _raw_for_upgrade.get("pixel_fired"):
+                    _nlog = _raw_for_upgrade
+
+                _detected_pixel_id = _nlog.get("detected_pixel_id")
+                if _detected_pixel_id:
+                    _html_for_upgrade = (
+                        (_raw_for_upgrade.get("html") or "")
+                        or (html or "")
+                    )
+                    _html_lower_upgrade = _html_for_upgrade.lower()
+                    if "shopify.theme" in _html_lower_upgrade or "cdn.shopify.com" in _html_lower_upgrade:
+                        _prev_platform, _prev_conf = platform, conf
+                        # Do not downgrade an already-stronger classification.
+                        if _prev_conf < 0.95 or _prev_platform != "shopify":
+                            platform = "shopify"
+                            conf = 0.95
+                        if not any("Pixel + Theme" in str(e) for e in platform_evidence):
+                            platform_evidence.append(
+                                f"Pixel ID {_detected_pixel_id} + Shopify theme/CDN markers"
+                            )
+                        logger.info(
+                            f"Upgraded platform confidence to Shopify (0.95) due to Pixel + Theme Signals. "
+                            f"Pixel ID={_detected_pixel_id}; previous={_prev_platform}/{_prev_conf}."
+                        )
+                    else:
+                        logger.debug(
+                            f"Pixel ID {_detected_pixel_id} detected but no Shopify theme/CDN markers; "
+                            f"keeping platform={platform} conf={conf}."
+                        )
+                elif _nlog.get("pixel_fired"):
+                    logger.debug(
+                        f"Pixel activity observed for {page_name} but no ID extracted; "
+                        f"no platform upgrade applied."
+                    )
+            except Exception as _upgrade_err:
+                logger.debug(f"Cross-signal platform upgrade skipped for {page_name}: {_upgrade_err}")
 
             # [SEED: 2399] CROSS-PLATFORM TIMEOUT GUARD FOR DEEP SCAN
             if page.raw:

@@ -10,7 +10,10 @@ from .l3_site.cart_analysis import CartAnalyzer
 from .l3_site.api_interceptor import ApiInterceptor
 from .l3_site.saas_waste import SaasWasteAnalyzer
 from .l3_site.pricing_friction import PricingFrictionAnalyzer
+import logging # <--- FIX: Import logging module
 
+# Initialize module-level logger
+logger = logging.getLogger(__name__)
 
 class TelemetryCollector:
     def __init__(self):
@@ -23,120 +26,130 @@ class TelemetryCollector:
         self.pricing = PricingFrictionAnalyzer()
 
     def collect(self, url: str) -> dict:
-        """[SEED: 2399] SELF-HEALING TELEMETRY ENGINE WITH ADVANCED WAF BYPASS
-        
+        """[SEED: 2399] SELF-HEALING TELEMETRY ENGINE (NO ARCHIVE RELIANCE)
+
         Strategy:
-        1. Attempt Full Dynamic Probe (Playwright).
-        2. If Fail/Empty, Retry once with extended timeout.
-        3. If Still Fail, Fall back to Multi-Profile Stealth Fetch (curl_cffi).
-           - Tries Chrome, Safari, Firefox impersonations.
-           - Parses Static HTML for Pixel IDs to prevent 'False Negative' on L2.
-        4. Never return empty dict unless URL is totally unreachable.
+        1. Run L2LiveProbe (Stealth Chromium + DOM Injection).
+        2. If Blocked/Empty, Fall back to Multi-Profile Stealth Fetch (curl_cffi).
+        3. If STILL Fail, Return Structured WAF_BLOCKED Result.
         """
         max_retries = 2
         last_error = None
 
-        # --- ATTEMPT 1 & 2: Dynamic Probing (Playwright) ---
+        # --- ATTEMPT 1 & 2: Dynamic Probing (Stealth Chromium) ---
         for attempt in range(max_retries):
             try:
                 network_log = self.l2_probe.probe(url)
 
                 req_count = len(network_log.get("requests", [])) if isinstance(network_log, dict) else 0
+                waf_blocked = bool(network_log.get("waf_blocked", False))
 
-                if req_count > 0 or network_log.get("pixel_fired"):
-                    # Success! Gather remaining telemetry
+                # [FIX-2399] Success gate — trust the probe's own success signals.
+                # Previously this was `req_count > 0 and not waf_blocked`, which would
+                # discard a valid probe result when the funnel caught the pixel from
+                # fbq_captures with zero HTTP requests (rare service-worker setups).
+                # Now we also accept the case where the probe found a pixel AND its
+                # Meta-side validation confirmed the pixel is real.
+                probe_found_pixel = bool(network_log.get("detected_pixel_id")) if isinstance(network_log, dict) else False
+                probe_has_validation = bool(
+                    network_log.get("pixel_validation", {}).get("verdict") == "real_pixel_confirmed_by_config"
+                ) if isinstance(network_log, dict) else False
+
+                probe_success = (
+                    (req_count > 0 and not waf_blocked)
+                    or (probe_found_pixel and probe_has_validation)
+                    or (probe_found_pixel and req_count > 0)
+                )
+
+                if probe_success:
                     telemetry = self.perf.measure(url)
                     telemetry.update(self.mobile_ux.measure(url))
                     telemetry.update(self.cart.measure(url))
                     telemetry.update(self.api.measure(url))
                     telemetry.update(self.saas.measure(url))
                     telemetry.update(self.pricing.measure(url))
-
                     return {"network_log": network_log, "telemetry": telemetry}
+
+                # If blocked or empty, log and proceed to fallback
+                if waf_blocked:
+                    logger.warning(f"Primary Probe Blocked for {url}. Engaging Fallback.")
                 else:
-                    # Partial Failure: Empty logs but no crash. Retry.
-                    if attempt < max_retries - 1:
-                        import time
-                        time.sleep(2) # Cool down before retry
-                        continue
+                    logger.warning(f"Primary Probe Empty for {url}. Engaging Fallback.")
 
             except Exception as e:
                 last_error = e
-                if attempt < max_retries - 1:
-                    import time
-                    time.sleep(2)
-                    continue
+                logger.error(f"Primary Probe Failed: {e}")
 
-        # --- FALLBACK: Advanced Stealth Static Analysis (WAF Bypass Mode) ---
-        # We try multiple browser fingerprints to evade basic bot detection
+        # --- FALLBACK: Advanced Stealth Static Analysis (curl_cffi) ---
         try:
             from curl_cffi import requests as cffi_requests
             import re as _re_static
-            
+
             html = ""
-            resp_status = 0
-            
-            # Profiles to try: Chrome, Safari, Edge, Firefox
-            profiles = ["chrome120", "safari17_0", "edge101", "firefox133"]
-            
+            profiles = ["chrome131", "chrome120", "safari17_0", "edge101", "firefox133"]
+
             for profile in profiles:
                 try:
                     resp = cffi_requests.get(
-                        url, 
-                        impersonate=profile, 
-                        timeout=15,
-                        allow_redirects=True
+                        url,
+                        impersonate=profile,
+                        timeout=10,
+                        allow_redirects=True,
+                        headers={
+                            "Accept-Language": "en-US,en;q=0.9",
+                            "Referer": "https://www.google.com/",
+                            "Sec-Fetch-Dest": "document",
+                            "Sec-Fetch-Mode": "navigate",
+                            "Sec-Fetch-Site": "cross-site",
+                            "Upgrade-Insecure-Requests": "1",
+                        }
                     )
                     if resp.status_code == 200:
-                        # Check if we got a challenge page instead of real content
-                        body_preview = resp.text[:500].lower()
-                        if "cloudflare" in body_preview or "captcha" in body_preview or "just a moment" in body_preview:
-                            continue # Skip this profile, try next
-                        
+                        body_preview = resp.text[:1000].lower()
+                        if any(marker in body_preview for marker in ["cloudflare", "captcha", "just a moment", "access denied"]):
+                            continue
                         html = resp.text
-                        resp_status = 200
-                        break # Got clean HTML
+                        break
                 except Exception:
                     continue
 
-            if not html:
-                raise Exception("All stealth profiles failed or returned challenge pages.")
-
-            # Construct minimal valid structure
-            minimal_network_log = {
-                "requests": [],
-                "pixel_fired": False,
-                "waf_blocked": True, # Mark as WAF Blocked so L2 knows context
-                "fallback_mode": True,
-                "error_context": str(last_error) if last_error else "Dynamic probe returned empty; using static fallback."
-            }
-
-            # [SEED: 2399] CRITICAL UPGRADE: Extract Pixel ID from Static HTML
-            detected_pixel_id = None
             if html:
-                # Regex for fbq('init', 'ID')
+                minimal_network_log = {
+                    "requests": [],
+                    "pixel_fired": False,
+                    "waf_blocked": False, # We got HTML, so technically not blocked by WAF *for this fetch*
+                    "fallback_mode": True,
+                    "source": "CURL_CFFI_STEALTH",
+                    "error_context": str(last_error) if last_error else "Static Fallback."
+                }
+
+                detected_pixel_id = None
                 m = _re_static.search(r"""fbq\s*\(\s*['"]init['"]\s*,\s*['"](\d{8,})['"]\s*\)""", html)
                 if m:
                     detected_pixel_id = m.group(1)
-                
-                # Add this to network_log so L2 Scanner can find it
-                if detected_pixel_id:
                     minimal_network_log["static_pixel_detected"] = True
                     minimal_network_log["detected_pixel_id"] = detected_pixel_id
+                    minimal_network_log["pixel_fired"] = True # Mark as fired since we found init code
 
-            perf_data = self.perf.measure_static(html) if hasattr(self.perf, 'measure_static') else {}
+                perf_data = self.perf.measure_static(html) if hasattr(self.perf, 'measure_static') else {}
+                return {
+                    "network_log": minimal_network_log,
+                    "telemetry": perf_data,
+                    "collection_status": "FALLBACK_STEALTH_STATIC_SUCCESS"
+                }
 
-            return {
-                "network_log": minimal_network_log,
-                "telemetry": perf_data,
-                "collection_status": "FALLBACK_STEALTH_STATIC_SUCCESS"
-            }
+        except Exception as static_e:
+            logger.debug(f"Static Fallback failed: {static_e}")
 
-        except Exception as final_e:
-            # Absolute worst case: Return structured error so pipeline continues
-            return {
-                "network_log": {},
-                "telemetry": {},
-                "collection_status": "TOTAL_FAILURE",
-                "final_error": str(final_e)
-            }
+        # Absolute worst case: Return Clean Block Status
+        return {
+            "network_log": {
+                "requests": [],
+                "pixel_fired": False,
+                "waf_blocked": True,
+                "fallback_mode": True,
+                "error_context": "All methods failed. Site protected by aggressive WAF."
+            },
+            "telemetry": {},
+            "collection_status": "TOTAL_FAILURE_WAF"
+        }

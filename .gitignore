@@ -53,3 +53,18 @@ output
 # Logs
 *.log
 /celery_new.log
+
+# Shell-mangled tracked filenames (historical)
+-d
+-exec
+
+# Manual backups
+*.pybackup
+*.pybackupDeepSk
+*.py.backup
+*.bak_*
+*.bak_2399
+
+# Runtime artifacts
+.coverage
+waf_forensics.json

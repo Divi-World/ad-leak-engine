@@ -29,16 +29,27 @@ class PlatformDetector(AbstractPlatformDetector):
                 best_platform = platform
                 best_evidence = matched_markers
 
-        # --- PHASE 2: NEXT.JS / VERCEL SPECIAL HANDLING ---
+        # --- PHASE 2: AGGRESSIVE FRAMEWORK DETECTION ---
         if html:
             lower_html = html.lower()
-            # Strong indicators of Next.js
-            if "__next_data__" in lower_html or "_next/static" in lower_html:
-                # RETURN 3 ITEMS TO MATCH CONTRACT
-                return ("nextjs", 0.95, ["__next_data__ found"]) 
+            
+            # Next.js / Vercel
+            if "__next_data__" in lower_html or "_next/static" in lower_html or "buildId" in lower_html:
+                return ("nextjs", 0.98, ["Next.js Build Artifacts Found"]) 
+            
+            # Nuxt.js
+            if "__NUXT_DATA__" in lower_html or "/_nuxt/" in lower_html:
+                return ("nuxt", 0.95, ["Nuxt.js Hydration Data Found"])
+                
+            # Gatsby
+            if "___gatsby" in lower_html or "/page-data/" in lower_html:
+                return ("gatsby", 0.90, ["Gatsby Page Data Found"])
 
-            if "vercel" in lower_html and "x-vercel-id" in lower_html:
-                 return ("nextjs", 0.90, ["Vercel ID found"])
+            # Shopify (Double Check for Minified Themes)
+            if "cdn.shopify.com" in lower_html and "Shopify.theme" in lower_html:
+                 # Override low confidence if strong signals exist
+                 if best_platform != "shopify" or best_confidence < 0.9:
+                     return ("shopify", 0.96, ["CDN Shop Theme Assets"])
 
         # Final Return: Always 3 items
         return (best_platform, best_confidence, best_evidence)

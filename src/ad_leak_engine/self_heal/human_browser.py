@@ -13,6 +13,17 @@ VIEWPORT_WEIGHTS = [0.35, 0.30, 0.20, 0.15]
 LOCALES = ["en-US", "en-GB", "en-CA"]
 LOCALE_WEIGHTS = [0.80, 0.10, 0.10]
 
+# [SEED: 2399] REALISTIC USER AGENTS FOR DESKTOP CHROME/FIREFOX
+USER_AGENTS = [
+    # Chrome Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    # Firefox Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    # macOS Chrome
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+]
+
 def _bezier_curve(p0, p1, p2, p3, t: float):
     u = 1 - t
     return (
@@ -27,19 +38,41 @@ class HumanBrowser:
     @contextmanager
     def session(self) -> Iterator[Page]:
         import camoufox.sync_api
+        
         viewport = random.choices(VIEWPORTS, weights=VIEWPORT_WEIGHTS, k=1)[0]
         locale = random.choices(LOCALES, weights=LOCALE_WEIGHTS, k=1)[0]
+        ua = random.choice(USER_AGENTS)
 
         with camoufox.sync_api.Camoufox(
             headless=self.headless,
-            geoip=True,
-            humanize=True,
+            geoip=True,      # Maps IP to Geo
+            humanize=True,   # Simulates human input
+            os="windows",    # Force Windows fingerprint
         ) as browser:
             context = browser.new_context(
                 viewport={"width": viewport[0], "height": viewport[1]},
                 locale=locale,
                 timezone_id="America/New_York",
+                user_agent=ua, # <--- INJECT REAL UA
             )
+            
+            # [SEED: 2399] ANTI-DETECTION SCRIPTS
+            # Hide webdriver, plugins, languages inconsistencies
+            context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                window.chrome = { runtime: {} };
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+                
+                // Fake WebGL Vendor
+                const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) return 'Intel Inc.';
+                    if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+                    return originalGetParameter.call(this, parameter);
+                };
+            """)
+
             page = context.new_page()
             try:
                 yield page
@@ -52,43 +85,33 @@ class HumanBrowser:
 
     @staticmethod
     def human_scroll(page: Page, distance: int = 600, steps: int = 8):
-        """Scroll with realistic velocity. Catches SPA context destruction."""
+        """Scroll with realistic velocity."""
         step_size = distance / steps
         for i in range(steps):
             factor = 1 - (i / steps) ** 2
             try:
                 page.mouse.wheel(0, step_size * factor)
             except PlaywrightError as e:
-                # Meta's SPA changes history state during scroll, destroying context briefly
-                if "context was destroyed" in str(e).lower() or "navigation" in str(e).lower():
-                    pass 
+                if "context was destroyed" in str(e).lower():
+                    pass
                 else:
                     raise
             time.sleep(random.uniform(0.05, 0.15))
 
     @staticmethod
-    def prime_facebook_session(page: Page, timeout_ms: int = 30000) -> bool:
+    def solve_cloudflare_turnstile(page: Page) -> bool:
+        """Attempts to click the Turnstile checkbox if present."""
         try:
-            page.goto("https://www.facebook.com/", wait_until="domcontentloaded", timeout=timeout_ms)
-            HumanBrowser.human_pause(1.5, 3.0)
-            consent_selectors = [
-                'button:has-text("Allow all")',
-                'button:has-text("Allow essential and optional cookies")',
-                'button:has-text("Decline optional cookies")',
-                '[data-cookiebanner="accept_button"]',
-                'button:has-text("Accept")',
-                'button[data-testid="cookie-policy-manage-dialog-accept-button"]',
-            ]
-            for sel in consent_selectors:
-                try:
-                    loc = page.locator(sel).first
-                    if loc.is_visible(timeout=1200):
-                        loc.click()
-                        HumanBrowser.human_pause(0.5, 1.0)
-                        break
-                except Exception:
-                    continue
-            HumanBrowser.human_pause(2.0, 4.0)
-            return True
+            # Look for the iframe containing the turnstile
+            frames = page.frames
+            for frame in frames:
+                if "challenges.cloudflare.com" in frame.url:
+                    # Try to find the checkbox inside the frame
+                    checkbox = frame.locator("input[type='checkbox']").first
+                    if checkbox.is_visible(timeout=2000):
+                        checkbox.click()
+                        page.wait_for_timeout(3000) # Wait for verification
+                        return True
         except Exception:
-            return False
+            pass
+        return False
