@@ -87,6 +87,26 @@ def discover_emails_from_page(html: str, base_url: str = "") -> list[str]:
         e = e.split('?')[0].strip().lower()
         if _is_valid_business_email(e):
             emails.add(e)
+
+    # 3. Obfuscated emails: "info [at] domain [dot] com", HTML entities, spaced @
+    obfuscation_patterns = [
+        (r'([a-zA-Z0-9._%+-]+)\s*[\[\(\{]\s*at\s*[\]\)\}]\s*([a-zA-Z0-9.-]+)\s*[\[\(\{]\s*dot\s*[\]\)\}]\s*([a-zA-Z]{2,})', 3),
+        (r'([a-zA-Z0-9._%+-]+)\s*@\s*([a-zA-Z0-9.-]+)\s*\.\s*([a-zA-Z]{2,})', 3),
+        (r'((?:&#\d+;)+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', 2),
+    ]
+    for pattern, group_count in obfuscation_patterns:
+        for match in re.finditer(pattern, html, re.IGNORECASE):
+            try:
+                if group_count == 3:
+                    email = f"{match.group(1)}@{match.group(2)}.{match.group(3)}".lower().strip()
+                else:
+                    local = re.sub(r'&#(\d+);', lambda m: chr(int(m.group(1))), match.group(1))
+                    email = f"{local}@{match.group(2)}".lower().strip()
+                if _is_valid_business_email(email):
+                    emails.add(email)
+                    logger.info(f"[EMAIL-OBFUSCATED] Decoded: {email}")
+            except Exception:
+                continue
             
     return list(emails)[:10]
 
@@ -121,8 +141,6 @@ def _is_valid_business_email(email: str) -> bool:
     if local.endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.js', '.css')):
         return False
 
-    return True
-        
     return True
 
 def crawl_contact_pages_smart(landing_url: str) -> list[str]:

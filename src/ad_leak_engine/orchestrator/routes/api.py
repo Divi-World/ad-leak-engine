@@ -1245,81 +1245,12 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                         else:
                             platform, conf, platform_evidence = detector.detect(landing, html)
 
-                        import re as _re_discover
-                        raw_emails = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', html)
-                        raw_cleaned = [e for e in raw_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]
-                        poison = ["window", "call", "apply", "src", "data", "length", "anim", "native", "function", "gst", "mzst", "vtls", "liquid", "sentry", "zipify", "bugsnag", "rollbar", "newrelic", "datadome", "example.com", "example.org", "example.net", "test.com", "localhost", "stripe.com", "paypal.com", "shopify.com", "wix.com", "wordpress.com", "squarespace.com", "notifications@", "noreply@", "no-reply@", "donotreply@", "trustandsafety@", "sellersupport@", "community@"]
-                        discovered_emails = list(set([e for e in raw_cleaned if not any(p in e.lower() for p in poison)]))[:5]
-
-                        if not discovered_emails:
-                            contact_paths = ["/contact", "/about", "/imprint", "/contact-us", "/pages/contact-us", "/policies/privacy-policy", "/pages/contact"]
-                            from ...cli import _fetch_html_stealth
-                            for path in contact_paths:
-                                try:
-                                    contact_url = f"https://{domain_lower}{path}"
-                                    contact_html = _fetch_html_stealth(contact_url)
-                                    if contact_html:
-                                        import re as _re_dom
-                                        import json as _json_dom
-                                        schema_emails = []
-                                        for schema_match in _re_dom.finditer(r"""<script[^>]+type=["']application/ld\+json["'][^>]*>(.*?)</script>""", contact_html, _re_dom.IGNORECASE | _re_dom.DOTALL):
-                                            try:
-                                                data = _json_dom.loads(schema_match.group(1))
-                                                def extract_schema_emails(obj):
-                                                    if isinstance(obj, dict):
-                                                        for k, v in obj.items():
-                                                            if 'email' in k.lower() and isinstance(v, str) and '@' in v:
-                                                                schema_emails.append(v.replace('mailto:', '').strip())
-                                                            else:
-                                                                extract_schema_emails(v)
-                                                    elif isinstance(obj, list):
-                                                        for item in obj: extract_schema_emails(item)
-                                                extract_schema_emails(data)
-                                            except Exception: pass
-                                        mailto_links = _re_dom.findall(r"""href=["']mailto:([^"']+)""", contact_html, _re_dom.IGNORECASE)
-                                        raw_emails_deep = _re_dom.findall(r"""[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}""", contact_html)
-                                        all_found = schema_emails + mailto_links + raw_emails_deep
-                                        cleaned = []
-                                        for e in all_found:
-                                            e = e.strip().split('?')[0]
-                                            if e and '@' in e and not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io', '.example.com')):
-                                                cleaned.append(e)
-                                        discovered_emails = [e for e in set(cleaned) if _re_dom.match(r'^[^@]+@[^@]+\.[^@]+$', e)][:5]
-                                        if discovered_emails: break
-                                except Exception: pass
-
-                        if not discovered_emails:
-                            for path in ["/contact", "/pages/contact-us", "/contact-us", "/about"]:
-                                try:
-                                    contact_url = f"https://{domain_lower}{path}"
-                                    stealth_html = _fetch_html_stealth(contact_url)
-                                    if stealth_html and len(stealth_html) > 500:
-                                        import re as _re_stealth
-                                        import json as _json_stealth
-                                        s_emails = []
-                                        for m in _re_stealth.finditer(r"""<script[^>]+type=["']application/ld\+json["'][^>]*>(.*?)</script>""", stealth_html, _re_stealth.IGNORECASE | _re_stealth.DOTALL):
-                                            try:
-                                                data = _json_stealth.loads(m.group(1))
-                                                def extract(obj):
-                                                    if isinstance(obj, dict):
-                                                        for k, v in obj.items():
-                                                            if 'email' in k.lower() and isinstance(v, str) and '@' in v: s_emails.append(v.replace('mailto:', '').strip())
-                                                            else: extract(v)
-                                                    elif isinstance(obj, list):
-                                                        for i in obj: extract(i)
-                                                extract(data)
-                                            except: pass
-                                        s_emails.extend(_re_stealth.findall(r"""href=["']mailto:([^"']+)""", stealth_html, _re_stealth.IGNORECASE))
-                                        s_emails.extend(_re_stealth.findall(r"""[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}""", stealth_html))
-                                        final_s = []
-                                        for e in s_emails:
-                                            e = e.strip().split('?')[0]
-                                            if e and '@' in e and not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io')):
-                                                final_s.append(e)
-                                        discovered_emails = [e for e in set(final_s) if _re_stealth.match(r'^[^@]+@[^@]+\.[^@]+$', e)][:5]
-                                        if discovered_emails: break
-                                except Exception: pass
-
+                        from ...shared.email_discovery import discover_emails_aggressively
+                        
+                        # Use the unified, multi-layered discovery module
+                        discovered_emails = discover_emails_aggressively(landing, initial_html=html)
+                        
+                        # SMTP verification fallback if the aggressive discovery found nothing
                         if not discovered_emails:
                             try:
                                 import dns.resolver, smtplib
@@ -1329,6 +1260,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                                     mx_host = str(sorted([(r.preference, str(r.exchange)) for r in answers])[0][1]).rstrip(".")
                                 except Exception:
                                     mx_host = None
+                                
                                 if mx_host:
                                     verified = []
                                     for role in ["support@", "info@", "hello@", "contact@", "help@"]:
@@ -1347,20 +1279,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                                     discovered_emails = verified[:3]
                             except ImportError:
                                 pass
-
-                        if not discovered_emails:
-                            try:
-                                from curl_cffi import requests as cffi_requests
-                                wb_resp = cffi_requests.get(f"http://archive.org/wayback/available?url={domain_lower}", impersonate="chrome120", timeout=10.0)
-                                if wb_resp.status_code == 200:
-                                    wb_data = wb_resp.json()
-                                    if "archived_snapshots" in wb_data and "closest" in wb_data["archived_snapshots"]:
-                                        wb_url = wb_data["archived_snapshots"]["closest"].get("url")
-                                        if wb_url:
-                                            wb_html = cffi_requests.get(wb_url, impersonate="chrome120", timeout=15.0).text
-                                            wb_emails = _re_discover.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', wb_html)
-                                            discovered_emails = list(set([e for e in wb_emails if not e.lower().endswith(('.png', '.jpg', '.gif', '.svg', '.webp', '.js', '.css', 'sentry.io'))]))[:5]
-                            except Exception: pass
+                        
                         _write_status(job_id, {"status": "running", "progress": min(95, 58 + int(50 * processed / max(limit, 1))), "stage": f"Auditing {page_name}: platform fingerprinted as {platform}"})
 
                 except Exception:
