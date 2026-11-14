@@ -577,6 +577,19 @@ class L2LiveProbe:
                             score = self._score_pixel_probability(dm, "DATA_LAYER_CONTEXT")
                             if score > 0.4:
                                 candidates.append((dm, score))
+
+                # NEW: vtp_map structure (multi-region Meta Pixel lookup tables)
+                # Pattern: ["map","key","us","value","1689016458013442"]
+                vtp_map_pattern = re.compile(
+                    r'\["map","key","([a-z]{2,3})","value","(\d{15,16})"\]'
+                )
+                for region, pid in vtp_map_pattern.findall(body):
+                    score = self._score_pixel_probability(pid, "VTP_MAP")
+                    # vtp_map entries are unambiguous region→pixel mappings
+                    score = min(1.0, score + 0.1)
+                    if score > 0.5:
+                        candidates.append((pid, score))
+                        logger.info(f"[GTM_RESOLVE] vtp_map region={region} pixel={pid}")
         except Exception as e:
             logger.debug(f"GTM Resolution failed for {gtm_id}: {e}")
         candidates.sort(key=lambda x: x[1], reverse=True)
@@ -918,6 +931,95 @@ class L2LiveProbe:
             logger.error(f"[INVISIBLE] Critical Error: {e}")
             network_log["blocked_status"] = "ERROR"
             return network_log
+
+    # ------------------------------------------------------------------ #
+    # TIER 0: Shopify Web Pixels Manager Static Parser
+    # ------------------------------------------------------------------ #
+
+    def _probe_with_shopify_sandbox(self, url: str) -> dict | None:
+        """
+        Statically parses Shopify's `webPixelsConfigList` to extract the Pixel ID.
+        Searches for the facebook_pixel configuration type, not a hardcoded app ID.
+        """
+        if not cffi_requests:
+            return None
+
+        try:
+            resp = cffi_requests.get(url, impersonate="chrome120", timeout=15)
+            if resp.status_code != 200:
+                return None
+
+            html = resp.text
+            if "webPixelsConfigList" not in html:
+                return None
+
+            # Find the array and extract it with balanced brackets
+            start_idx = html.find('"webPixelsConfigList":')
+            if start_idx == -1:
+                return None
+            array_start = html.find('[', start_idx)
+            if array_start == -1:
+                return None
+            bracket_count = 0
+            end_idx = -1
+            for i in range(array_start, len(html)):
+                if html[i] == '[':
+                    bracket_count += 1
+                elif html[i] == ']':
+                    bracket_count -= 1
+                    if bracket_count == 0:
+                        end_idx = i + 1
+                        break
+            if end_idx == -1:
+                return None
+
+            array_str = html[array_start:end_idx]
+
+            pixel_id = None
+
+            # Strategy 1: Find the facebook_pixel configuration block directly
+            # The config string contains \"pixel_id\":\"...\" and \"pixel_type\":\"facebook_pixel\"
+            # We search for pixel_type facebook_pixel, then extract the nearby pixel_id
+            fb_type_match = re.search(
+                r'"pixel_type"\s*:\s*"facebook_pixel".*?"pixel_id"\s*:\s*"(\d{10,16})"',
+                array_str, re.IGNORECASE | re.DOTALL
+            )
+            if not fb_type_match:
+                # Try reversed order: pixel_id before pixel_type
+                fb_type_match = re.search(
+                    r'"pixel_id"\s*:\s*"(\d{10,16})".*?"pixel_type"\s*:\s*"facebook_pixel"',
+                    array_str, re.IGNORECASE | re.DOTALL
+                )
+            if fb_type_match:
+                pixel_id = fb_type_match.group(1)
+
+            # Strategy 2: Fallback — any pixel_id in an entry whose configuration contains "facebook"
+            if not pixel_id:
+                # Find all configuration strings, check if they contain facebook
+                for config_match in re.finditer(r'"configuration"\s*:\s*"(\{.*?\})"', array_str):
+                    config_str = config_match.group(1).replace('\\"', '"')
+                    if "facebook" in config_str.lower():
+                        pid_match = re.search(r'"pixel_id"\s*:\s*"(\d{10,16})"', config_str)
+                        if pid_match:
+                            pixel_id = pid_match.group(1)
+                            break
+
+            if pixel_id:
+                logger.info(f"[SHOPIFY_SANDBOX] Extracted Pixel ID statically: {pixel_id}")
+                return {
+                    "pixel_fired": True, "requests": [], "capi_events": [],
+                    "detected_pixel_id": pixel_id, "gtm_id": None,
+                    "engine_used": "shopify_sandbox_static", "blocked_status": None,
+                    "has_event_data": False, "has_initiate_checkout": False,
+                    "has_add_to_cart": False, "has_purchase_event": False,
+                    "has_shared_event_id": False, "has_unhashed_pii": False,
+                    "fbq_events_observed": [],
+                }
+        except Exception as e:
+            logger.debug(f"[SHOPIFY_SANDBOX] Failed: {e}")
+
+        return None
+        
 
     # ------------------------------------------------------------------ #
     # Attempt 2: Ghost Protocol
@@ -1656,7 +1758,40 @@ class L2LiveProbe:
 
         gtm_id = None
 
-        # --- TIER 1: invisible_playwright (C++-level Firefox) ---
+        # --- TIER 0: Shopify Web Pixels Sandbox (Static) ---
+        logger.info(f"[SWARM] Checking Shopify Web Pixels Sandbox for {url}...")
+        sandbox_log = self._probe_with_shopify_sandbox(url)
+        if sandbox_log and sandbox_log.get("detected_pixel_id"):
+            final_log.update(sandbox_log)
+            logger.info(f"[SWARM] SUCCESS via Shopify Sandbox! Pixel: {sandbox_log['detected_pixel_id']}")
+            final_log["pixel_validation"] = self._validate_pixel_via_config(sandbox_log["detected_pixel_id"])
+            final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
+            return final_log
+
+        # --- TIER 1: Static GTM Resolver (early, before browser engines) ---
+        if cffi_requests:
+            try:
+                resp = cffi_requests.get(url, impersonate="chrome120", timeout=15)
+                if resp.status_code == 200:
+                    gtm_matches = RE_GTM_ID.findall(resp.text)
+                    if gtm_matches:
+                        gtm_id = gtm_matches[0]
+                        logger.info(f"[SWARM] Found GTM container {gtm_id}, resolving statically...")
+                        resolved_pixels = self._resolve_gtm_container_pixels(gtm_id, url)
+                        if resolved_pixels:
+                            best_pid = resolved_pixels[0][0]
+                            final_log["detected_pixel_id"] = best_pid
+                            final_log["pixel_fired"] = True
+                            final_log["gtm_id"] = gtm_id
+                            final_log["engine_used"] = "gtm_static_resolver"
+                            logger.info(f"[SWARM] SUCCESS via GTM Static Resolver! Pixel: {best_pid}")
+                            final_log["pixel_validation"] = self._validate_pixel_via_config(best_pid)
+                            final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
+                            return final_log
+            except Exception as e:
+                logger.debug(f"[SWARM] Early GTM check failed: {e}")
+
+        # --- TIER 2: invisible_playwright (C++-level Firefox) ---
         if INVISIBLE_AVAILABLE:
             logger.info(f"[SWARM] Starting invisible_playwright Probe for {url}...")
             iw_log = self._probe_with_invisible(url)
@@ -1672,14 +1807,14 @@ class L2LiveProbe:
                 else:
                     logger.info(f"[SWARM] invisible_playwright completed but no Pixel found. Trying Camoufox.")
 
-        # --- TIER 2: Camoufox ---
+        # --- TIER 3: Camoufox ---
         logger.info(f"[SWARM] Starting Camoufox Probe for {url}...")
         cf_log = self._probe_with_camoufox(url)
         if cf_log:
             final_log.update(cf_log)
             if cf_log.get("detected_pixel_id"):
                 logger.info(f"[SWARM] SUCCESS via Camoufox! Pixel: {cf_log['detected_pixel_id']}")
-                final_log["detected_pixel_id"] = cf_log["detected_pixel_id"]  # [FIX] assign ID before validation
+                final_log["detected_pixel_id"] = cf_log["detected_pixel_id"]
                 final_log["pixel_validation"] = self._validate_pixel_via_config(cf_log["detected_pixel_id"])
                 final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
                 return final_log
@@ -1688,7 +1823,7 @@ class L2LiveProbe:
             else:
                 logger.info(f"[SWARM] Camoufox completed but no Pixel found. Trying Ghost Protocol.")
 
-        # --- TIER 3: Ghost Protocol ---
+        # --- TIER 4: Ghost Protocol ---
         logger.info(f"[SWARM] Starting Ghost Protocol for {url}...")
         ghost_log = self._probe_with_ghost_protocol(url)
 
@@ -1708,7 +1843,7 @@ class L2LiveProbe:
 
             if ghost_log.get("detected_pixel_id"):
                 logger.info(f"[SWARM] SUCCESS via Ghost Protocol! Pixel: {ghost_log['detected_pixel_id']}")
-                final_log["detected_pixel_id"] = ghost_log["detected_pixel_id"]  # [FIX] assign ID before validation
+                final_log["detected_pixel_id"] = ghost_log["detected_pixel_id"]
                 final_log["pixel_validation"] = self._validate_pixel_via_config(ghost_log["detected_pixel_id"])
                 final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
                 return final_log
@@ -1716,7 +1851,7 @@ class L2LiveProbe:
             if ghost_log.get("gtm_id"):
                 final_log["gtm_id"] = ghost_log["gtm_id"]
 
-        # --- TIER 4: Universal Data Extractor ---
+        # --- TIER 5: Universal Data Extractor ---
         logger.info(f"[SWARM] Engaging Universal Data Extractor...")
         extraction_result = self.data_extractor.full_extract(url)
 
@@ -1728,20 +1863,6 @@ class L2LiveProbe:
             final_log["pixel_validation"] = self._validate_pixel_via_config(extraction_result["detected_pixel_id"])
             final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
             return final_log
-
-        # --- TIER 5: Static GTM Resolver ---
-        gtm_id = final_log.get("gtm_id")
-        if gtm_id:
-            resolved_pixels = self._resolve_gtm_container_pixels(gtm_id, url)
-            if resolved_pixels:
-                best_pid = resolved_pixels[0][0]
-                final_log["detected_pixel_id"] = best_pid
-                final_log["pixel_fired"] = True
-                final_log["engine_used"] = "static_resolver"
-                logger.info(f"[SWARM] SUCCESS via Static Resolver! Pixel: {best_pid}")
-                final_log["pixel_validation"] = self._validate_pixel_via_config(best_pid)
-                final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
-                return final_log
 
         # --- TIER 6: Funnel escalation for e-commerce targets ---
         escalate = force_ecommerce or self._looks_like_ecommerce(url)
