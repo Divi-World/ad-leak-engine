@@ -121,6 +121,10 @@ def _is_valid_business_email(email: str) -> bool:
     if local.startswith(('u003', 'u002', 'u00a', 'u00b')):
         return False
 
+    # Reject JavaScript event handler artifacts (e.g., @click.prevent, @submit)
+    if any(handler in local for handler in ("click", "submit", "prevent", "stop", "change")):
+        return False
+
     # Reject common noise
     noise_domains = ["example.com", "test.com", "localhost", "sentry.io", "bugsnag", "newrelic", "datadome"]
     if any(nd in domain for nd in noise_domains):

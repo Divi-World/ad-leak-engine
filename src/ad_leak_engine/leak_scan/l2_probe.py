@@ -860,7 +860,25 @@ class L2LiveProbe:
                 page.on("response", on_response)
 
                 logger.info(f"[INVISIBLE] Navigating to {url}...")
-                resp = page.goto(url, wait_until="networkidle", timeout=90000)
+                # Use 'domcontentloaded' first, then attempt to reach a reasonable state.
+                # 'networkidle' is too strict for sites with persistent popups or analytics beacons.
+                try:
+                    resp = page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                except Exception as e:
+                    logger.warning(f"[INVISIBLE] Initial navigation issue: {e}. Proceeding to popup handling.")
+                    resp = None
+
+                # Wait a brief moment for initial JS to execute
+                time.sleep(2)
+
+                # Dismiss any popups that appeared
+                self._dismiss_popups(page)
+
+                # Now try to wait for network to settle, but do not fail the whole probe if it times out
+                try:
+                    page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    logger.info("[INVISIBLE] networkidle not reached after popup dismissal (this is acceptable). Proceeding with current state.")
 
                 html = page.content()
                 logger.info(f"[INVISIBLE] Loaded status={resp.status if resp else None} html_len={len(html)}")
@@ -931,6 +949,37 @@ class L2LiveProbe:
             logger.error(f"[INVISIBLE] Critical Error: {e}")
             network_log["blocked_status"] = "ERROR"
             return network_log
+
+
+    def _dismiss_popups(self, page) -> None:
+        """
+        Attempts to click common popup dismissal selectors.
+        This is critical for sites with cookie consent modals, newsletter popups,
+        or location selectors that block networkidle.
+        """
+        popup_selectors = [
+            # Cookie consent (OneTrust, Cookiebot, Shopify)
+            "button:has-text('Accept')", "button:has-text('Accept All')",
+            "button:has-text('Agree')", "button:has-text('Allow All')",
+            "#onetrust-accept-btn-handler", ".cc-btn", "[data-cookiefirst-action='accept']",
+            # Newsletter/Modal close buttons
+            "button[aria-label='Close']", "button[aria-label='Dismiss']",
+            ".modal__close", ".popup-close", ".close-modal",
+            "[data-dismiss='modal']", ".needsclick[aria-label='Close']",
+            # Location/Region selectors
+            "button:has-text('Stay')", "button:has-text('Continue')",
+            "button:has-text('Confirm')", "button:has-text('No Thanks')",
+        ]
+        for selector in popup_selectors:
+            try:
+                btn = page.locator(selector).first
+                if btn.is_visible(timeout=1000):
+                    btn.click(timeout=3000)
+                    logger.info(f"[POPUP] Dismissed: {selector}")
+                    time.sleep(0.5)  # Brief pause for popup animation
+            except Exception:
+                continue
+
 
     # ------------------------------------------------------------------ #
     # TIER 0: Shopify Web Pixels Manager Static Parser
