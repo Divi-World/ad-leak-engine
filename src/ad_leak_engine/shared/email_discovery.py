@@ -147,6 +147,103 @@ def _is_valid_business_email(email: str) -> bool:
 
     return True
 
+def discover_phone_numbers_from_page(html: str) -> list[str]:
+    """
+    Extracts phone numbers from HTML. Requires a context anchor to avoid
+    matching SKU codes, timestamps, or other digit sequences.
+
+    Anchors accepted:
+    1. tel: links (the merchant explicitly marked this as a phone)
+    2. Phone number preceded within 30 chars by "phone", "call", "tel", "contact", or "reach"
+    3. International format (leading + with country code)
+    """
+    if not html:
+        return []
+
+    phones = set()
+
+    # 1. tel: links — most reliable, the merchant intends these to be clickable
+    tel_pattern = r'href=["\']tel:([+\d\s\-\(\)\.]{7,20})["\']'
+    for match in re.findall(tel_pattern, html, re.IGNORECASE):
+        cleaned = re.sub(r'[^\d+]', '', match)
+        if 7 <= len(cleaned) <= 15:
+            phones.add(cleaned)
+
+    # 2. Context-anchored: "Phone: 555-123-4567" or "Call us at (555) 987-6543"
+    # The anchor must appear within 40 chars before the number.
+    context_pattern = re.compile(
+        r'(?:phone|call|tel|telephone|contact|reach|dial|hotline|support)'
+        r'[^0-9]{0,40}'
+        r'(\+?\d[\d\s\-\(\)\.]{6,18}\d)',
+        re.IGNORECASE
+    )
+    for match in context_pattern.finditer(html):
+        cleaned = re.sub(r'[^\d+]', '', match.group(1))
+        if 7 <= len(cleaned) <= 15:
+            phones.add(cleaned)
+
+    # 3. International format with explicit country code (leading +)
+    intl_pattern = r'\+\d{10,15}'
+    for match in re.findall(intl_pattern, html):
+        phones.add(match)
+
+    return sorted(phones)[:5]
+
+
+def discover_social_handles_from_page(html: str) -> list[dict]:
+    """
+    Extracts social profile URLs and handles from HTML.
+    Returns list of dicts with platform, handle, url — ready for direct copy/paste.
+    """
+    if not html:
+        return []
+
+    platforms = {
+        "facebook": r'(?:https?:)?//(?:www\.)?facebook\.com/([A-Za-z0-9_\.\-]+)',
+        "instagram": r'(?:https?:)?//(?:www\.)?instagram\.com/([A-Za-z0-9_\.]+)',
+        "twitter": r'(?:https?:)?//(?:www\.)?(?:twitter|x)\.com/([A-Za-z0-9_]+)',
+        "linkedin": r'(?:https?:)?//(?:www\.)?linkedin\.com/(?:company|in)/([A-Za-z0-9_\-]+)',
+        "youtube": r'(?:https?:)?//(?:www\.)?youtube\.com/(?:c/|channel/|@)?([A-Za-z0-9_\-]+)',
+        "tiktok": r'(?:https?:)?//(?:www\.)?tiktok\.com/@([A-Za-z0-9_\.]+)',
+        "pinterest": r'(?:https?:)?//(?:www\.)?pinterest\.com/([A-Za-z0-9_\-]+)',
+        "threads": r'(?:https?:)?//(?:www\.)?threads\.net/@([A-Za-z0-9_\.]+)',
+    }
+
+    # Reject platform-internal paths that are not real handles
+    excluded_handles = {
+        "sharer", "share", "intent", "login", "signup", "help", "policies",
+        "terms", "privacy", "about", "business", "developers", "tr", "dialog",
+        "plugins", "watch", "results", "hashtag", "explore",
+    }
+
+    found = {}
+    for platform, pattern in platforms.items():
+        for match in re.finditer(pattern, html, re.IGNORECASE):
+            handle = match.group(1).strip("/").lower()
+            if not handle or handle in excluded_handles:
+                continue
+            if len(handle) < 2 or len(handle) > 60:
+                continue
+            # Prefer first occurrence per platform
+            if platform not in found:
+                base_urls = {
+                    "facebook": "https://facebook.com",
+                    "instagram": "https://instagram.com",
+                    "twitter": "https://x.com",
+                    "linkedin": "https://linkedin.com/company",
+                    "youtube": "https://youtube.com",
+                    "tiktok": "https://tiktok.com",
+                    "pinterest": "https://pinterest.com",
+                    "threads": "https://threads.net",
+                }
+                prefix = "@" if platform in ("youtube", "tiktok", "threads") else ""
+                found[platform] = {
+                    "platform": platform,
+                    "handle": handle,
+                    "url": f"{base_urls[platform]}/{prefix}{handle}",
+                }
+    return list(found.values())
+
 def crawl_contact_pages_smart(landing_url: str) -> list[str]:
     """
     SMART CRAWLER:

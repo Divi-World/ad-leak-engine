@@ -1250,6 +1250,14 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                         # Use the unified, multi-layered discovery module
                         discovered_emails = discover_emails_aggressively(landing, initial_html=html)
                         
+                        # Phase 1: extract phones and social handles in the same pass
+                        from ...shared.email_discovery import (
+                            discover_phone_numbers_from_page,
+                            discover_social_handles_from_page,
+                        )
+                        discovered_phones = discover_phone_numbers_from_page(html)
+                        discovered_social = discover_social_handles_from_page(html)
+
                         # SMTP verification fallback if the aggressive discovery found nothing
                         if not discovered_emails:
                             try:
@@ -1466,18 +1474,35 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                         "Generic GTM/server-side fixes were used."
                     )
 
-                _appendix = [
+                _contact_lines = [
                     "",
                     "---",
                     "",
                     "## Outreach Contact Intelligence",
-                    f"- **Best public contact email:** {_email_report.get('email') or 'Not captured'}",
-                    f"- **Email tier:** {_email_report.get('tier') or 'none'}",
-                    f"- **Email score:** {_email_report.get('score', 0)}",
-                    f"- **Recommended use:** {_email_report.get('recommended_use') or 'none'}",
-                    f"- **Prospect intent:** {_intent_report.get('primary') or 'unknown'}",
-                    "",
                 ]
+                if _email_report.get("email"):
+                    _contact_lines.extend([
+                        f"- **Best public contact email:** {_email_report.get('email')}",
+                        f"- **Email tier:** {_email_report.get('tier') or 'none'}",
+                        f"- **Email score:** {_email_report.get('score', 0)}",
+                        f"- **Recommended use:** {_email_report.get('recommended_use') or 'none'}",
+                    ])
+                else:
+                    _contact_lines.append("- **Best public contact email:** Not captured")
+
+                if discovered_phones:
+                    _contact_lines.append(f"- **Phone number(s):** {', '.join(discovered_phones[:3])}")
+
+                if discovered_social:
+                    _contact_lines.append("- **Social media handles:**")
+                    for s in discovered_social[:5]:
+                        _contact_lines.append(f"  - {s['platform'].title()}: {s['url']}")
+
+                _contact_lines.append(
+                    f"- **Prospect intent:** {_intent_report.get('primary') or 'unknown'}"
+                )
+                _contact_lines.append("")
+                _appendix = _contact_lines
 
                 if _routing_note:
                     _appendix.extend([
@@ -1576,6 +1601,14 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 "email_score": _email_report.get("score"),
                 "email_reason": _email_report.get("reason"),
                 "email_recommended_use": _email_report.get("recommended_use"),
+                "discovered_phones": discovered_phones,
+                "discovered_social": discovered_social,
+                "contact_method_priority": (
+                    "email" if _email_report.get("email")
+                    else "phone" if discovered_phones
+                    else "social" if discovered_social
+                    else "none"
+                ),
                 "competitor_benchmark": competitor_data is not None
             })
             processed += 1
