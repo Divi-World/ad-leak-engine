@@ -555,6 +555,198 @@ originalPermissionsQuery(parameters)
             return min(1.0, base_score)
         return 0.0
 
+    # ------------------------------------------------------------------ #
+    # MULTI-PIXEL HARVEST + TEALIUM iQ RESOLVER + EXPLICIT CONSENT
+    # ------------------------------------------------------------------ #
+    def _harvest_all_pixel_ids(self, all_requests: list, merged_log: dict) -> list:
+        """Advertisers run more than one pixel. Report every ID with its provenance."""
+        found = {}
+
+        def add(pid, src):
+            pid = str(pid)
+            if not pid.isdigit() or not (10 <= len(pid) <= 16):
+                return
+            e = found.setdefault(pid, {"pixel_id": pid, "sources": [], "hits": 0})
+            if src not in e["sources"]:
+                e["sources"].append(src)
+            e["hits"] += 1
+
+        for r in all_requests:
+            if not isinstance(r, dict):
+                continue
+            u = str(r.get("url", ""))
+            m = RE_CONFIG_BUNDLE.search(u)
+            if m:
+                add(m.group(1), "network_config_bundle")
+            if "facebook.com/tr" in u:
+                m2 = RE_TR_PIXEL_ID.search(u)
+                if m2:
+                    add(m2.group(1), "network_tr")
+            m3 = RE_CAPI_URL.search(u)
+            if m3:
+                add(m3.group(1), "capi_graph")
+        for c in (merged_log.get("fbq_raw_calls") or []):
+            if not isinstance(c, dict):
+                continue
+            a = c.get("args") or []
+            ct = c.get("call_type")
+            if not a:
+                continue
+            if ct == "init":
+                add(a[0], "fbq_init")
+            elif ct in ("trackSingle", "trackSingleCustom"):
+                add(a[0], "fbq_track_single")
+        out = sorted(found.values(), key=lambda x: (-x["hits"], x["pixel_id"]))
+        logger.info(f"[PIXEL_SET] {json.dumps(out)}")
+        return out
+
+    def _resolve_tealium_pixels(self, all_requests: list, referer_url: str) -> list:
+        """
+        Static, browser-free Meta pixel extraction from Tealium iQ tag files.
+        URLs are derived from what the page ACTUALLY loaded — never guessed.
+        Enterprise stacks (Argos/Sainsburys class) hide pixels in utag.N.js.
+        """
+        if not cffi_requests:
+            return []
+        urls, seen = [], set()
+        for r in all_requests:
+            if not isinstance(r, dict):
+                continue
+            u = str(r.get("url", ""))
+            if "utag." not in u or ".js" not in u:
+                continue
+            base = u.split("?")[0]
+            if base in seen:
+                continue
+            seen.add(base)
+            urls.append(u)
+        if not urls:
+            return []
+        logger.info(f"[TEALIUM] {len(urls)} tag file(s) discovered from live traffic")
+        out = {}
+        for u in urls[:12]:
+            try:
+                resp = cffi_requests.get(u, impersonate="chrome120", timeout=8,
+                                         headers={"Referer": referer_url})
+                if resp.status_code != 200:
+                    continue
+                body = resp.text or ""
+                low = body.lower()
+                if not any(k in low for k in ("fbq", "facebook", "pixel")):
+                    continue
+                cands = set(RE_FBQ_INIT.findall(body))
+                for m in re.finditer(r"\b(\d{15,16})\b", body):
+                    ctx = low[max(0, m.start() - 220):m.start() + 220]
+                    if any(k in ctx for k in ("fbq", "facebook", "pixel")):
+                        cands.add(m.group(1))
+                for pid in cands:
+                    sc = self._score_pixel_probability(pid, "TEALIUM_TAG")
+                    if sc <= 0.5:
+                        continue
+                    e = out.setdefault(pid, {"pixel_id": pid, "score": sc, "sources": []})
+                    if u not in e["sources"]:
+                        e["sources"].append(u)
+                    logger.info(f"[TEALIUM] pixel={pid} file={u.split('/')[-1].split('?')[0]}")
+            except Exception as e:
+                logger.debug(f"[TEALIUM] fetch failed {u[:80]}: {e}")
+        return sorted(out.values(), key=lambda x: -x["score"])
+
+    def _handle_consent(self, page, merged_log: dict, runner_name: str) -> dict:
+        """
+        Grant CMP consent using the page's own control inventory (index-based).
+        Proven causal on consent-gated stacks: the grant releases the tag
+        manager's Meta tag. Verified against dataLayer, never assumed.
+        """
+        out = {"detected": None, "granted": False, "control": None, "verified": False}
+        snap = self._snapshot_gate(page)
+        btns = snap.get("buttons") or []
+        texts = [str(x.get("text", "")).strip().lower() for x in btns]
+        classes = " ".join(str(x.get("cls", "")) for x in btns).lower()
+        cmp_context = (
+            any(t in ("required only", "let me choose", "reject all", "manage preferences") for t in texts)
+            or "onetrust" in classes or "cookie-setting-link" in classes
+            or "cookiebot" in classes
+        )
+        pats = [
+            (r"^accept all", "onetrust"),
+            (r"^allow all", "generic"),
+            (r"^continue and accept$", "onetrust"),
+            (r"^accept all cookies$", "generic"),
+            (r"^i accept$", "generic"),
+            (r"^agree$", "generic"),
+            (r"^accept$", "generic"),
+        ]
+        pick = None
+        for pat, vendor in pats:
+            for x in btns:
+                if x.get("disabled"):
+                    continue
+                t = str(x.get("text", "")).strip().lower()
+                if re.match(pat, t) and (vendor == "onetrust" or cmp_context):
+                    pick = (x, vendor)
+                    break
+            if pick:
+                break
+        if pick:
+            x, vendor = pick
+            out["detected"], out["control"] = vendor, x.get("text")
+            try:
+                loc = page.locator('button, a[role="button"], [role="button"], input[type="submit"]').nth(x["idx"])
+                try:
+                    loc.click(timeout=3000)
+                except Exception:
+                    loc.evaluate("(el) => el.click()")
+                out["granted"] = True
+                time.sleep(2.5)
+            except Exception as e:
+                logger.debug(f"[CONSENT/{runner_name}] inventory click failed: {e}")
+        if not out["granted"]:
+            for sel in ("#onetrust-accept-btn-handler",
+                        "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+                        "#CybotCookiebotDialogBodyButtonAccept"):
+                try:
+                    loc = page.locator(sel).first
+                    if loc.is_visible(timeout=800):
+                        out["detected"], out["control"] = "cmp_id", sel
+                        try:
+                            loc.click(timeout=2500)
+                        except Exception:
+                            loc.evaluate("(el) => el.click()")
+                        out["granted"] = True
+                        time.sleep(2.5)
+                        break
+                except Exception:
+                    continue
+        try:
+            st = page.evaluate("""() => {
+                const dl = Array.isArray(window.dataLayer) ? window.dataLayer : [];
+                let seen = 0, granted = false;
+                for (const e of dl) {
+                    try {
+                        const s = JSON.stringify(e);
+                        if (s && s.indexOf('"consent"') !== -1) {
+                            seen++;
+                            if (s.indexOf('"granted"') !== -1) granted = true;
+                        }
+                    } catch (err) {}
+                }
+                return {consent_entries: seen, any_granted: granted,
+                        banner_present: !!document.querySelector('#onetrust-banner-sdk, #CybotCookiebotDialog')};
+            }""") or {}
+            out["verified"] = bool(st.get("any_granted"))
+            out["state"] = st
+        except Exception as e:
+            out["state_error"] = str(e)
+        if out["granted"]:
+            logger.info(f"[CONSENT/{runner_name}] {out['detected']} via {out['control']!r} "
+                        f"verified={out['verified']} state={json.dumps(out.get('state', {}))}")
+            merged_log.setdefault("consent_events", []).append(dict(out, ts=time.time(), url=page.url))
+        else:
+            logger.info(f"[CONSENT/{runner_name}] no CMP control matched "
+                        f"(cmp_context={cmp_context}, buttons={len(btns)})")
+        return out
+
+
     def _resolve_gtm_container_pixels(self, gtm_id: str, referer_url: str) -> list[tuple[str, float]]:
         if not cffi_requests:
             return []
@@ -2297,7 +2489,7 @@ originalPermissionsQuery(parameters)
                         if (btns.length && btns.length <= 6) {
                             const b = btns.find(x => /^(search|find|look ?up|check|submit)$/i.test((x.innerText||x.value||'').trim()))
                                    || btns.find(x => /search|find|look ?up/i.test((x.innerText||x.value||'')));
-                            if (b) { b.click(); return true; }
+                            if (b) { b.click(); return (b.innerText||b.value||'button').trim().slice(0,40); }
                         }
                     }
                     scope = scope.parentElement;
@@ -2337,7 +2529,10 @@ originalPermissionsQuery(parameters)
             str(f.get("value", "")).replace(" ", "").upper() == _pc_norm
             for f in (after.get("inputs") or [])
         )
-        _err_now = bool(after.get("markers", {}).get("error_visible"))
+        _hard = re.search(r"something went wrong|please try again|invalid post ?code|"
+                          r"no results found|address not found|please enter a valid",
+                          str(after.get("body_snippet", "")), re.I)
+        _err_now = bool(_hard)
         ok = bool(submitted) and not _err_now and _pc_persisted
         merged_log["fulfilment_steps"].append({
             "action": "postcode_submitted", "value_used": pc, "submitted": submitted,
@@ -2388,9 +2583,11 @@ originalPermissionsQuery(parameters)
         Explicitly refuses 'Continue shopping' / back / basket / cancel controls."""
         flow = ("checkout", "/basket/fulfilment", "/basket/payment", "/basket/delivery",
                 "/basket/summary", "/on/demandware.store", "/payment", "/billing")
-        neg = re.compile(r"shopping|keep browsing|back|basket|cart|bag|cancel|close|edit|remove|apply|promo|voucher", re.I)
+        neg = re.compile(r"shopping|keep browsing|back|basket|cart|bag|cancel|close|edit|"
+                         r"remove|apply|promo|voucher|required only|let me choose|reject all", re.I)
         prefs = ("continue to payment", "proceed to payment", "continue to billing",
-                 "continue to delivery", "continue", "next", "proceed")
+                 "continue to delivery", "continue with delivery", "continue to shipping",
+                 "deliver here", "use this address", "continue", "next", "proceed")
         snap = self._snapshot_gate(page)
         ranked = []
         for b in (snap.get("buttons") or []):
@@ -2463,6 +2660,9 @@ originalPermissionsQuery(parameters)
             logger.info(f"[FULFIL/{runner_name}] No fulfilment gate evidenced on {page.url}. Not acting.")
             return out
         out["attempted"] = True
+        # CMP on this class of stack renders at checkout, not at landing.
+        merged_log["consent_at_gate"] = self._handle_consent(page, merged_log, runner_name)
+        self._record_meta_delta(merged_log, all_requests, page, "after_consent")
 
         # Pass 1 — postcode only if already rendered (upfront-ask platforms).
         if m.get("asks_postcode"):
@@ -2494,16 +2694,30 @@ originalPermissionsQuery(parameters)
         self._merge_funnel_captures(merged_log, caps, "payment_gate")
 
         # Pass 5 — one bounded retry if a required postcode is still outstanding.
+        # Pass 5 — a successful postcode re-renders the page and exposes a NEW
+        # forward control. Poll for it (bounded), then act. Never pays.
         if not out["payment_reached"]:
-            late = self._snapshot_gate(page)
-            if late.get("markers", {}).get("asks_postcode") and not out["postcode"]:
-                logger.info(f"[FULFIL/{runner_name}] Forward blocked with postcode outstanding. Retry once.")
-                out["postcode"] = self._enter_postcode(page, merged_log, runner_name)
-                self._record_meta_delta(merged_log, all_requests, page, "after_postcode_retry")
-                out["payment_reached"] = self._continue_to_payment(page, merged_log, runner_name)
-                self._record_meta_delta(merged_log, all_requests, page, "after_continue_retry")
-                caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=20)
-                self._merge_funnel_captures(merged_log, caps, "payment_gate_retry")
+            _dl = time.time() + 10
+            while time.time() < _dl:
+                late = self._snapshot_gate(page)
+                lm = late.get("markers", {})
+                if lm.get("asks_postcode") and not out["postcode"]:
+                    logger.info(f"[FULFIL/{runner_name}] postcode outstanding - retry once")
+                    out["postcode"] = self._enter_postcode(page, merged_log, runner_name)
+                    self._record_meta_delta(merged_log, all_requests, page, "after_postcode_retry")
+                    break
+                _txt = [str(x.get("text", "")).lower() for x in (late.get("buttons") or [])]
+                if any(t.startswith(("continue", "proceed", "next", "deliver here", "use this"))
+                       and not re.search(r"shopping|accept|required only|let me choose", t)
+                       for t in _txt):
+                    logger.info(f"[FULFIL/{runner_name}] new forward control appeared after postcode")
+                    break
+                time.sleep(1.0)
+            out["payment_reached"] = self._continue_to_payment(page, merged_log, runner_name)
+            self._record_meta_delta(merged_log, all_requests, page, "after_continue_retry")
+            caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=20)
+            self._merge_funnel_captures(merged_log, caps, "payment_gate_retry")
+
 
         final = self._snapshot_gate(page)
         merged_log["checkout_snapshot"] = final
@@ -2799,6 +3013,7 @@ originalPermissionsQuery(parameters)
             self._dismiss_popups(page)
         except Exception as e:
             logger.debug(f"[FUNNEL/{runner_name}] _dismiss_popups failed: {e}")
+        merged_log["consent_result"] = self._handle_consent(page, merged_log, runner_name)
         content = page.content()
 
         if "challenges.cloudflare.com" in content or "<title>Just a moment..." in content:
@@ -3108,6 +3323,15 @@ originalPermissionsQuery(parameters)
             "fbevents_js_urls": [r["url"] for r in fbevents_hits[:3]],
             "config_bundle_urls": [r["url"] for r in config_bundle_hits[:3]],
         }
+        merged_log["detected_pixel_ids"] = self._harvest_all_pixel_ids(all_requests, merged_log)
+        merged_log["tealium_pixels"] = self._resolve_tealium_pixels(all_requests, landing_url)
+        for _tp in (merged_log["tealium_pixels"] or []):
+            if not any(e["pixel_id"] == _tp["pixel_id"] for e in merged_log["detected_pixel_ids"]):
+                merged_log["detected_pixel_ids"].append(
+                    {"pixel_id": _tp["pixel_id"], "sources": ["tealium_static"], "hits": 1})
+        if not merged_log.get("detected_pixel_id") and merged_log["detected_pixel_ids"]:
+            merged_log["detected_pixel_id"] = merged_log["detected_pixel_ids"][0]["pixel_id"]
+            merged_log["pixel_id_source"] = merged_log["detected_pixel_ids"][0]["sources"][0]
         merged_log["meta_fb_observations"] = meta_fb_summary
         merged_log["tracking_diagnostics"] = self._dump_tracking_diagnostics(page, all_requests)
         logger.warning(f"[FUNNEL/{runner_name}] META_FB_OBSERVATIONS: {json.dumps(meta_fb_summary, default=str)[:2000]}")
@@ -3216,6 +3440,12 @@ originalPermissionsQuery(parameters)
             pid = result["detected_pixel_id"]
             logger.info(f"[FUNNEL] Validating pixel {pid} against Meta config...")
             result["pixel_validation"] = self._validate_pixel_via_config(pid)
+            _set = result.get("detected_pixel_ids") or []
+            if _set:
+                result["pixel_validations"] = [
+                    self._validate_pixel_via_config(e["pixel_id"]) for e in _set[:4]
+                ]
+                logger.info(f"[FUNNEL] validated {len(result['pixel_validations'])} pixel(s)")
             result["tracking_mode_inferred"] = self._infer_tracking_mode(result)
             logger.info(
                 f"[FUNNEL] pixel={pid} | "
@@ -3436,6 +3666,13 @@ originalPermissionsQuery(parameters)
                         "fbq_raw_calls",
                         "fbq_call_types",
                         "tracking_diagnostics",
+                        "detected_pixel_ids",
+                        "pixel_validations",
+                        "tealium_pixels",
+                        "consent_events",
+                        "consent_result",
+                        "request_attempts",
+                        "blocked_requests",
                     ):
                         if funnel.get(_k) not in (None, [], {}, ""):
                             final_log[_k] = funnel[_k]
