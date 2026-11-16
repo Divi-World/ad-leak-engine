@@ -558,6 +558,232 @@ originalPermissionsQuery(parameters)
     # ------------------------------------------------------------------ #
     # MULTI-PIXEL HARVEST + TEALIUM iQ RESOLVER + EXPLICIT CONSENT
     # ------------------------------------------------------------------ #
+    def _attribute_events_per_pixel(self, merged_log: dict) -> dict:
+        """Per-pixel event coverage. A site with two pixels can leak on one only."""
+        per = {}
+        def slot(pid):
+            pid = str(pid or "unknown")
+            return per.setdefault(pid, {
+                "pixel_id": pid, "events": [], "event_ids": [],
+                "has_add_to_cart": False, "has_initiate_checkout": False,
+                "has_purchase_event": False, "has_unhashed_pii": False,
+                "sources": [],
+            })
+        for e in (merged_log.get("meta_tr_events") or []):
+            s = slot(e.get("pixel_id"))
+            ev = e.get("event")
+            if ev and ev not in s["events"]:
+                s["events"].append(ev)
+            if "network_tr" not in s["sources"]:
+                s["sources"].append("network_tr")
+            for k, flag in (("AddToCart","has_add_to_cart"),
+                            ("InitiateCheckout","has_initiate_checkout"),
+                            ("Purchase","has_purchase_event")):
+                if ev == k:
+                    s[flag] = True
+        for c in (merged_log.get("fbq_raw_calls") or []):
+            if not isinstance(c, dict):
+                continue
+            a = c.get("args") or []
+            ct = c.get("call_type")
+            pid = None; ev = None; payload = {}; eid = None
+            if ct == "init" and a:
+                pid = a[0]
+            elif ct in ("trackSingle", "trackSingleCustom") and len(a) >= 2:
+                pid, ev = a[0], a[1]
+                payload = a[2] if len(a) >= 3 and isinstance(a[2], dict) else {}
+                eid = a[3] if len(a) >= 4 else payload.get("eventID")
+            elif ct in ("track", "trackCustom") and a:
+                pid = merged_log.get("detected_pixel_id")
+                ev = a[0]
+                payload = a[1] if len(a) >= 2 and isinstance(a[1], dict) else {}
+                eid = a[2] if len(a) >= 3 else payload.get("eventID")
+            s = slot(pid)
+            if "fbq_capture" not in s["sources"]:
+                s["sources"].append("fbq_capture")
+            if ev:
+                if ev not in s["events"]:
+                    s["events"].append(ev)
+                for k, flag in (("AddToCart","has_add_to_cart"),
+                                ("InitiateCheckout","has_initiate_checkout"),
+                                ("Purchase","has_purchase_event")):
+                    if ev == k:
+                        s[flag] = True
+            if eid and eid not in s["event_ids"]:
+                s["event_ids"].append(eid)
+            try:
+                if self._payload_has_unhashed_pii(payload):
+                    s["has_unhashed_pii"] = True
+            except Exception:
+                pass
+        for e in (merged_log.get("detected_pixel_ids") or []):
+            s = slot(e.get("pixel_id"))
+            for sc in (e.get("sources") or []):
+                if sc not in s["sources"]:
+                    s["sources"].append(sc)
+        logger.info(f"[PER_PIXEL] {json.dumps(per, default=str)[:2000]}")
+        return per
+
+    def _apply_operator_session(self, page, merged_log: dict, runner_name: str) -> dict:
+        """
+        Optional operator-supplied authenticated session. Never credentials in code.
+        ADLEAK_STORAGE_STATE points to a Playwright storage_state JSON the operator
+        produced from their OWN test account. Cookies are injected; nothing else.
+        """
+        out = {"applied": False, "reason": None, "cookie_count": 0}
+        path = os.environ.get("ADLEAK_STORAGE_STATE", "").strip()
+        if not path:
+            out["reason"] = "no_session_supplied"
+            return out
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            cookies = data.get("cookies") or []
+            if cookies:
+                page.context.add_cookies(cookies)
+                out["applied"] = True
+                out["cookie_count"] = len(cookies)
+                logger.info(f"[SESSION/{runner_name}] injected {len(cookies)} operator cookie(s)")
+            else:
+                out["reason"] = "no_cookies_in_state"
+        except Exception as e:
+            out["reason"] = f"{type(e).__name__}: {str(e)[:120]}"
+            logger.warning(f"[SESSION/{runner_name}] session load failed: {out['reason']}")
+        merged_log["operator_session"] = out
+        return out
+
+    def _classify_checkout_blocker(self, page, merged_log: dict, runner_name: str) -> dict:
+        """Evidence-driven blocker classification. Multi-platform, no hardcoding."""
+        snap = self._snapshot_gate(page)
+        url = str(snap.get("url") or page.url or "").lower()
+        body = str(snap.get("body_snippet", "")).lower()
+        btns = snap.get("buttons") or []
+        inputs = snap.get("inputs") or []
+        out = {"kind": None, "url": url, "guest_controls": [], "auth_markers": []}
+        if any(k in url for k in ("/login", "/signin", "/sign-in", "/auth",
+                                  "login_challenge", "/oauth", "/sso", "/session")):
+            out["auth_markers"].append("auth_url")
+        if any(f.get("type") == "password" for f in inputs):
+            out["auth_markers"].append("password_field")
+        if any(k in body for k in ("sign in", "log in", "create an account",
+                                   "enter your password", "email address")):
+            out["auth_markers"].append("auth_text")
+        grx = re.compile(r"guest|without an account|no account|continue as guest|"
+                         r"checkout as guest|skip (sign|log)", re.I)
+        for x in btns:
+            t = str(x.get("text", ""))
+            if grx.search(t) and not x.get("disabled"):
+                out["guest_controls"].append({"idx": x["idx"], "text": t})
+        if any(k in body for k in ("captcha", "verify you are human", "are you a robot")):
+            out["kind"] = "captcha"
+        elif out["auth_markers"]:
+            out["kind"] = "auth_wall_with_guest" if out["guest_controls"] else "auth_wall"
+        elif any(k in body for k in ("minimum spend", "minimum order", "below the minimum")):
+            out["kind"] = "minimum_spend"
+        elif "out of stock" in body or "delivery unavailable" in body:
+            out["kind"] = "stock_or_delivery"
+        out["guest_available"] = bool(out["guest_controls"])
+        merged_log.setdefault("checkout_blockers", []).append(dict(out, ts=time.time()))
+        logger.info(f"[BLOCKER/{runner_name}] {json.dumps(out, default=str)[:900]}")
+        return out
+
+    def _attempt_guest_checkout(self, page, merged_log: dict, runner_name: str, blocker: dict) -> bool:
+        """Use a guest path when the merchant offers one. Inventory-driven."""
+        if not blocker.get("guest_controls"):
+            return False
+        flow = ("checkout", "/basket", "/bag", "/cart", "/trolley", "/payment", "demandware")
+        for g in blocker["guest_controls"][:2]:
+            before = page.url
+            try:
+                loc = page.locator('button, a[role="button"], [role="button"], input[type="submit"]').nth(g["idx"])
+                try:
+                    with page.expect_navigation(timeout=12000):
+                        loc.evaluate("(el) => el.click()")
+                except Exception:
+                    loc.evaluate("(el) => el.click()")
+                    time.sleep(4)
+            except Exception as e:
+                logger.debug(f"[GUEST/{runner_name}] click failed: {e}")
+                continue
+            after = self._snapshot_gate(page)
+            nu = str(after.get("url") or "")
+            ok = any(m in nu.lower() for m in flow)
+            merged_log.setdefault("guest_attempts", []).append({
+                "control": g["text"], "url_before": before, "url_after": nu,
+                "stayed_in_flow": ok, **after,
+            })
+            logger.info(f"[GUEST/{runner_name}] '{g['text']}' -> {nu} in_flow={ok}")
+            if ok:
+                return True
+            try:
+                page.goto(before, wait_until="domcontentloaded", timeout=30000)
+                time.sleep(2)
+            except Exception:
+                pass
+        return False
+
+    def _capture_boundary_evidence(self, page, merged_log: dict, all_requests: list,
+                                   runner_name: str, label: str) -> dict:
+        """
+        Capture what fires AT the blocker (SSO/login pages often carry their own
+        pixels) BEFORE restoring. This is real evidence we previously discarded.
+        """
+        snap = self._snapshot_gate(page)
+        self._record_meta_delta(merged_log, all_requests, page, label)
+        caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=12)
+        self._merge_funnel_captures(merged_log, caps, label)
+        rec = {"boundary": label, "url": snap.get("url"), "title": snap.get("title"),
+               "markers": snap.get("markers", {}), "buttons": snap.get("buttons", [])[:15]}
+        merged_log.setdefault("boundary_evidence", []).append(rec)
+        logger.info(f"[BOUNDARY/{runner_name}] {label} url={snap.get('url')} "
+                    f"buttons={json.dumps([x.get('text') for x in rec['buttons']])[:400]}")
+        return rec
+
+    def _capture_payment_stage(self, page, merged_log: dict, all_requests: list,
+                               runner_name: str) -> dict:
+        """
+        Prove we reached the payment stage and record the provider + field surface.
+        NEVER submits payment. NEVER enters card data.
+        """
+        out = {"reached": False, "providers": [], "card_surface": [], "url": page.url}
+        try:
+            probe = page.evaluate("""() => {
+                const srcs = Array.from(document.querySelectorAll('iframe[src]')).map(f => f.src);
+                const html = document.documentElement.innerHTML.toLowerCase();
+                const names = ['stripe','adyen','braintree','paypal','klarna','checkout.com',
+                               'worldpay','opayo','sagepay','square','mollie','cybersource'];
+                const fields = Array.from(document.querySelectorAll('input')).map(i => ({
+                    name: i.name||'', id: i.id||'', ac: i.getAttribute('autocomplete')||'',
+                    type: i.type||''
+                })).filter(f => /card|cc-|cvc|cvv|expiry|pan/i.test(f.name+f.id+f.ac));
+                return {
+                    iframes: srcs.slice(0, 12),
+                    providers: names.filter(n => html.includes(n) || srcs.some(s => s.toLowerCase().includes(n))),
+                    card_fields: fields.slice(0, 10),
+                };
+            }""") or {}
+            out["providers"] = probe.get("providers", [])
+            out["card_surface"] = probe.get("card_fields", [])
+            out["iframes"] = probe.get("iframes", [])
+        except Exception as e:
+            out["probe_error"] = str(e)
+        snap = self._snapshot_gate(page)
+        m = snap.get("markers", {})
+        out["url"] = snap.get("url")
+        out["markers"] = m
+        out["reached"] = bool(
+            m.get("has_pay_now") or m.get("has_continue_payment")
+            or out["providers"] or out["card_surface"]
+            or "payment" in str(out["url"]).lower() or "billing" in str(out["url"]).lower()
+        )
+        merged_log["payment_stage"] = out
+        self._record_meta_delta(merged_log, all_requests, page, "payment_stage")
+        caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=20)
+        self._merge_funnel_captures(merged_log, caps, "payment_stage")
+        logger.info(f"[PAYMENT/{runner_name}] reached={out['reached']} "
+                    f"providers={out['providers']} card_fields={len(out['card_surface'])} url={out['url']}")
+        return out
+
+
     def _harvest_all_pixel_ids(self, all_requests: list, merged_log: dict) -> list:
         """Advertisers run more than one pixel. Report every ID with its provenance."""
         found = {}
@@ -733,7 +959,22 @@ originalPermissionsQuery(parameters)
                 return {consent_entries: seen, any_granted: granted,
                         banner_present: !!document.querySelector('#onetrust-banner-sdk, #CybotCookiebotDialog')};
             }""") or {}
-            out["verified"] = bool(st.get("any_granted"))
+            _post = self._snapshot_gate(page)
+            _pt = [str(x.get("text", "")).strip().lower() for x in (_post.get("buttons") or [])]
+            out["banner_dismissed"] = not any(
+                t in ("required only", "let me choose", "reject all", "continue and accept")
+                or t.startswith("accept all") or t.startswith("allow all")
+                for t in _pt
+            )
+            try:
+                _ck = page.evaluate("() => (document.cookie.match(/OptanonConsent=([^;]*)/)||[])[1] || ''") or ""
+                import urllib.parse as _up
+                _dec = _up.unquote(_ck)
+                out["optanon_groups"] = (_dec.split("groups=")[1].split("&")[0] if "groups=" in _dec else None)
+                out["cookie_granted"] = bool(out["optanon_groups"] and ":1" in out["optanon_groups"])
+            except Exception:
+                out["cookie_granted"] = False
+            out["verified"] = bool(st.get("any_granted")) or out["banner_dismissed"] or out["cookie_granted"]
             out["state"] = st
         except Exception as e:
             out["state_error"] = str(e)
@@ -2533,10 +2774,18 @@ originalPermissionsQuery(parameters)
                           r"no results found|address not found|please enter a valid",
                           str(after.get("body_snippet", "")), re.I)
         _err_now = bool(_hard)
-        ok = bool(submitted) and not _err_now and _pc_persisted
+        _body_now = str(after.get("body_snippet", ""))
+        _pc_echo = _pc_norm in _body_now.replace(" ", "").upper()
+        _resolved = (
+            not after.get("markers", {}).get("asks_postcode")
+            or bool(re.search(r"delivery available|change post ?code|delivery information",
+                              _body_now, re.I))
+        )
+        _pc_accepted = bool(_pc_echo and _resolved)
+        ok = bool(submitted) and not _err_now and (_pc_persisted or _pc_accepted)
         merged_log["fulfilment_steps"].append({
             "action": "postcode_submitted", "value_used": pc, "submitted": submitted,
-            "state_changed": changed, "value_persisted": _pc_persisted, "error_visible": _err_now, "accepted_no_error": ok, **after,
+            "value_persisted": _pc_persisted, "merchant_accepted": _pc_accepted,
         })
         logger.info(f"[FULFIL/{runner_name}] postcode='{pc}' submitted={submitted} changed={changed} no_error={ok} url={after.get('url')}")
         return ok
@@ -2717,6 +2966,26 @@ originalPermissionsQuery(parameters)
             self._record_meta_delta(merged_log, all_requests, page, "after_continue_retry")
             caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=20)
             self._merge_funnel_captures(merged_log, caps, "payment_gate_retry")
+
+
+        # Phase 2 — payment execution: classify blocker, capture boundary, try guest,
+        # re-attempt forward, then record the payment stage. Never pays.
+        if not out["payment_reached"]:
+            _bl = self._classify_checkout_blocker(page, merged_log, runner_name)
+            if _bl.get("kind") in ("auth_wall", "auth_wall_with_guest", "captcha"):
+                self._capture_boundary_evidence(page, merged_log, all_requests,
+                                                runner_name, f"boundary_{_bl['kind']}")
+            if _bl.get("guest_available"):
+                if self._attempt_guest_checkout(page, merged_log, runner_name, _bl):
+                    out["guest_checkout"] = True
+                    out["payment_reached"] = self._continue_to_payment(page, merged_log, runner_name)
+                    self._record_meta_delta(merged_log, all_requests, page, "after_guest_continue")
+            out["blocker"] = _bl.get("kind")
+        _pay = self._capture_payment_stage(page, merged_log, all_requests, runner_name)
+        out["payment_stage_reached"] = bool(_pay.get("reached"))
+        if _pay.get("reached"):
+            out["payment_reached"] = True
+        merged_log["per_pixel"] = self._attribute_events_per_pixel(merged_log)
 
 
         final = self._snapshot_gate(page)
@@ -2959,6 +3228,7 @@ originalPermissionsQuery(parameters)
             page.on("response", on_response)
 
         attach_listener()
+        self._apply_operator_session(page, merged_log, runner_name)
         # Blocked != absent. Capture attempts and failures, not just responses.
         def _on_req(req):
             try:
@@ -3332,6 +3602,7 @@ originalPermissionsQuery(parameters)
         if not merged_log.get("detected_pixel_id") and merged_log["detected_pixel_ids"]:
             merged_log["detected_pixel_id"] = merged_log["detected_pixel_ids"][0]["pixel_id"]
             merged_log["pixel_id_source"] = merged_log["detected_pixel_ids"][0]["sources"][0]
+        merged_log["per_pixel"] = self._attribute_events_per_pixel(merged_log)
         merged_log["meta_fb_observations"] = meta_fb_summary
         merged_log["tracking_diagnostics"] = self._dump_tracking_diagnostics(page, all_requests)
         logger.warning(f"[FUNNEL/{runner_name}] META_FB_OBSERVATIONS: {json.dumps(meta_fb_summary, default=str)[:2000]}")
@@ -3364,8 +3635,11 @@ originalPermissionsQuery(parameters)
                     )
                     camoufox_result = result
                     context.close()
-                    if result.get("detected_pixel_id"):
-                        logger.info("[FUNNEL] Camoufox yielded pixel. Skipping Ghost.")
+                    _net_grade = (bool(result.get("meta_tr_events"))
+                                  or bool(result.get("meta_config_seen"))
+                                  or bool(result.get("fbq_events_observed")))
+                    if result.get("detected_pixel_id") and _net_grade:
+                        logger.info("[FUNNEL] Camoufox yielded NETWORK-grade pixel evidence. Skipping Ghost.")
                     else:
                         logger.info("[FUNNEL] Camoufox yielded no pixel. Trying Ghost, preserving Camoufox evidence.")
                         result = None
@@ -3420,12 +3694,48 @@ originalPermissionsQuery(parameters)
                     context.close()
                     browser.close()
 
+        def _union_engine_evidence(strong, weak):
+            """Never discard the other engine's findings. Union, do not replace."""
+            if not strong or not weak:
+                return strong
+            for k in ("meta_tr_events", "fbq_raw_calls", "blocked_requests",
+                      "request_attempts", "capi_events", "boundary_evidence",
+                      "checkout_blockers", "consent_events", "meta_observations_by_step"):
+                a = strong.setdefault(k, [])
+                seen = {json.dumps(x, sort_keys=True, default=str) for x in a if isinstance(x, (dict, list))}
+                for x in (weak.get(k) or []):
+                    s = json.dumps(x, sort_keys=True, default=str)
+                    if s not in seen:
+                        a.append(x); seen.add(s)
+            ids = {e["pixel_id"]: e for e in (strong.get("detected_pixel_ids") or [])}
+            for e in (weak.get("detected_pixel_ids") or []):
+                t = ids.setdefault(e["pixel_id"], {"pixel_id": e["pixel_id"], "sources": [], "hits": 0})
+                for sc in (e.get("sources") or []):
+                    if sc not in t["sources"]:
+                        t["sources"].append(sc)
+                t["hits"] = max(t.get("hits", 0), e.get("hits", 0))
+            strong["detected_pixel_ids"] = list(ids.values())
+            for k in ("tealium_pixels", "payment_stage", "operator_session"):
+                if not strong.get(k) and weak.get(k):
+                    strong[k] = weak[k]
+            for k in ("meta_config_seen", "meta_fbevents_loaded", "pixel_fired"):
+                strong[k] = bool(strong.get(k)) or bool(weak.get(k))
+            if not strong.get("detected_pixel_id") and weak.get("detected_pixel_id"):
+                strong["detected_pixel_id"] = weak["detected_pixel_id"]
+                strong["pixel_id_source"] = weak.get("pixel_id_source")
+            return strong
+
+
         def _evidence_score(r):
             if not r:
                 return -1
             g = r.get("fulfilment_result") or {}
             return (
                 (100 if r.get("detected_pixel_id") else 0)
+                + (150 if r.get("meta_tr_events") else 0)
+                + (40 if r.get("meta_config_seen") else 0)
+                + (30 if r.get("fbq_events_observed") else 0)
+                + (10 if g.get("postcode") else 0)
                 + 10 * int(r.get("items_added_verified") or 0)
                 + (20 if g.get("attempted") else 0)
                 + (5 if g.get("payment_reached") else 0)
@@ -3435,17 +3745,26 @@ originalPermissionsQuery(parameters)
         if _evidence_score(camoufox_result) > _evidence_score(result):
             logger.info("[FUNNEL] Camoufox run carried stronger evidence. Using it.")
             result = camoufox_result
+            result = _union_engine_evidence(result, camoufox_result if result is not camoufox_result else None)
 
+        if result is not None and camoufox_result is not None and result is not camoufox_result:
+            result = _union_engine_evidence(result, camoufox_result)
         if result and result.get("detected_pixel_id"):
             pid = result["detected_pixel_id"]
             logger.info(f"[FUNNEL] Validating pixel {pid} against Meta config...")
-            result["pixel_validation"] = self._validate_pixel_via_config(pid)
-            _set = result.get("detected_pixel_ids") or []
-            if _set:
-                result["pixel_validations"] = [
-                    self._validate_pixel_via_config(e["pixel_id"]) for e in _set[:4]
-                ]
-                logger.info(f"[FUNNEL] validated {len(result['pixel_validations'])} pixel(s)")
+            _val_by_id = {}
+            _ids = [pid] + [e["pixel_id"] for e in (result.get("detected_pixel_ids") or [])]
+            for _p in dict.fromkeys(_ids):
+                _val_by_id[_p] = self._validate_pixel_via_config(_p)
+            result["pixel_validation"] = _val_by_id.get(pid)
+            result["pixel_validations"] = list(_val_by_id.values())
+            result["pixel_evidence_grade"] = (
+                "network_transmission" if result.get("meta_tr_events")
+                else "network_config" if result.get("meta_config_seen")
+                else "browser_call" if result.get("fbq_events_observed")
+                else "static_only"
+            )
+            result["per_pixel"] = self._attribute_events_per_pixel(result)
             result["tracking_mode_inferred"] = self._infer_tracking_mode(result)
             logger.info(
                 f"[FUNNEL] pixel={pid} | "
@@ -3666,6 +3985,13 @@ originalPermissionsQuery(parameters)
                         "fbq_raw_calls",
                         "fbq_call_types",
                         "tracking_diagnostics",
+                        "per_pixel",
+                        "pixel_evidence_grade",
+                        "payment_stage",
+                        "checkout_blockers",
+                        "guest_attempts",
+                        "boundary_evidence",
+                        "operator_session",
                         "detected_pixel_ids",
                         "pixel_validations",
                         "tealium_pixels",
