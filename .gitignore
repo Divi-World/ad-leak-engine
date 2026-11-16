@@ -71,3 +71,8 @@ waf_forensics.json
 *.bak.*
 _repair_l2.py
 __pycache__/
+*.bak
+*backuprecent*
+_funnel_test.py
+_repair2.py
+evidence/
