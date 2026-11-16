@@ -420,10 +420,17 @@ class L2LiveProbe:
                     pid = str(args[0])
                     if not out["detected_pixel_id"]:
                         out["detected_pixel_id"] = pid
-                elif call_type == "track" and len(args) >= 1:
-                    evt_name = str(args[0]) if args[0] else ""
-                    payload = args[1] if len(args) >= 2 and isinstance(args[1], dict) else {}
-                    event_id = args[2] if len(args) >= 3 else payload.get("eventID")
+                elif call_type in ("track", "trackSingle", "trackCustom", "trackSingleCustom") and len(args) >= 1:
+                    if call_type in ("trackSingle", "trackSingleCustom") and len(args) >= 2:
+                        evt_name = str(args[1]) if args[1] else ""
+                        payload = args[2] if len(args) >= 3 and isinstance(args[2], dict) else {}
+                        event_id = args[3] if len(args) >= 4 else payload.get("eventID")
+                        if not out["detected_pixel_id"] and args[0]:
+                            out["detected_pixel_id"] = str(args[0])
+                    else:
+                        evt_name = str(args[0]) if args[0] else ""
+                        payload = args[1] if len(args) >= 2 and isinstance(args[1], dict) else {}
+                        event_id = args[2] if len(args) >= 3 else payload.get("eventID")
                     track_events.append(evt_name)
                     if evt_name == "Purchase":
                         purchase_events.append(payload)
@@ -1233,6 +1240,30 @@ originalPermissionsQuery(parameters)
         enriched = self._analyze_fbq_captures(captures)
         if enriched.get("detected_pixel_id") and not merged.get("detected_pixel_id"):
             merged["detected_pixel_id"] = enriched["detected_pixel_id"]
+            merged["pixel_id_source"] = "fbq_init"
+        # Never discard what the merchant actually called — this is the evidence.
+        from collections import Counter as _Ctr
+        _bucket = merged.setdefault("fbq_raw_calls", [])
+        _sigs = {
+            (str(x.get("ts")), str(x.get("call_type")),
+             json.dumps(x.get("args"), sort_keys=True, default=str)[:300])
+            for x in _bucket if isinstance(x, dict)
+        }
+        for _c in captures:
+            if not isinstance(_c, dict):
+                continue
+            _s = (str(_c.get("ts")), str(_c.get("call_type")),
+                  json.dumps(_c.get("args"), sort_keys=True, default=str)[:300])
+            if _s in _sigs:
+                continue
+            _sigs.add(_s)
+            if len(_bucket) < 60:
+                _bucket.append(_c)
+        merged["fbq_call_types"] = dict(_Ctr(
+            str(c.get("call_type")) for c in _bucket if isinstance(c, dict)
+        ))
+        merged["fbq_unique_call_count"] = len(_sigs)
+        logger.info(f"[FBQ_EVIDENCE] step={step_label} call_types={json.dumps(merged['fbq_call_types'])}")
         if enriched.get("synthetic_fbq_generated"):
             merged["synthetic_fbq_generated"] = True
         for k in ("has_event_data", "has_add_to_cart", "has_initiate_checkout",
@@ -1999,6 +2030,81 @@ originalPermissionsQuery(parameters)
     # ------------------------------------------------------------------ #
     # PER-STEP META DELTA (proves WHICH action surfaced Meta, if any)
     # ------------------------------------------------------------------ #
+
+    def _dump_tracking_diagnostics(self, page, all_requests: list) -> dict:
+        """
+        Answers 'why is the pixel dormant?' with measurement, not assumption.
+        Captures every Meta-domain request, GTM containers, consent/CMP state,
+        and the live fbq object state.
+        """
+        diag = {"meta_domain_requests": [], "gtm_containers": [], "cmp": {}, "fbq_state": {}}
+        try:
+            seen = set()
+            for r in all_requests:
+                if not isinstance(r, dict):
+                    continue
+                u = str(r.get("url", ""))
+                if any(d in u for d in ("facebook.net", "facebook.com", "fbcdn", "atdmt")):
+                    if u not in seen:
+                        seen.add(u)
+                        diag["meta_domain_requests"].append({"url": u[:300], "status": r.get("status")})
+                for g in RE_GTM_ID.findall(u):
+                    if g not in diag["gtm_containers"]:
+                        diag["gtm_containers"].append(g)
+        except Exception as e:
+            diag["request_scan_error"] = str(e)
+        try:
+            state = page.evaluate("""() => {
+                const ck = document.cookie.split(';').map(s => s.trim().split('=')[0]);
+                const out = {cmp: {}, fbq_state: {}};
+                out.cmp = {
+                    onetrust: typeof window.OneTrust !== 'undefined',
+                    optanon: typeof window.OptanonWrapper !== 'undefined',
+                    tcfapi: typeof window.__tcfapi !== 'undefined',
+                    uspapi: typeof window.__uspapi !== 'undefined',
+                    googlefc: typeof window.googlefc !== 'undefined',
+                    cookiebot: typeof window.Cookiebot !== 'undefined',
+                    consent_cookie_names: ck.filter(k => /consent|optanon|onetrust|cookie|gdpr|tcf|euconsent|cc_/i.test(k)),
+                    datalayer_consent: (() => {
+                        try {
+                            const dl = Array.isArray(window.dataLayer) ? window.dataLayer : [];
+                            const acc = [];
+                            for (const e of dl) {
+                                try {
+                                    const s = JSON.stringify(e);
+                                    if (s && s.toLowerCase().includes('consent')) acc.push(e);
+                                } catch (err) {}
+                                if (acc.length >= 8) break;
+                            }
+                            return acc;
+                        } catch (err) { return []; }
+                    })(),
+                    datalayer_is_array: Array.isArray(window.dataLayer),
+                    datalayer_len: (window.dataLayer && window.dataLayer.length) || 0,
+                };
+                try {
+                    if (typeof fbq === 'function') {
+                        out.fbq_state = {
+                            present: true,
+                            loaded: !!fbq.loaded,
+                            version: fbq.version || null,
+                            queue_len: (fbq.queue || []).length,
+                            pixels: (fbq.instance && fbq.instance.pixelsByID)
+                                    ? Object.keys(fbq.instance.pixelsByID) : [],
+                            captured_len: (window.__fbq_captured || []).length,
+                        };
+                    } else { out.fbq_state = {present: false}; }
+                } catch (e) { out.fbq_state = {error: String(e)}; }
+                return out;
+            }""")
+            diag["cmp"] = state.get("cmp", {})
+            diag["fbq_state"] = state.get("fbq_state", {})
+        except Exception as e:
+            diag["page_state_error"] = str(e)
+        logger.info(f"[TRACKING_DIAG] {json.dumps(diag, default=str)[:3000]}")
+        return diag
+
+
     def _record_meta_delta(self, merged_log: dict, all_requests: list, page, step: str) -> dict:
         def _n(pred):
             return sum(1 for r in all_requests if isinstance(r, dict) and pred(str(r.get("url", ""))))
@@ -2306,9 +2412,10 @@ originalPermissionsQuery(parameters)
 
     def _walk_fulfilment_gate(self, page, merged_log: dict, all_requests: list, runner_name: str) -> dict:
         """
-        Runs the gate only when the page evidences it. Every sub-action records a
-        Meta delta so the 'does postcode/delivery surface the pixel?' question is
-        answered by measurement, not by assumption.
+        Evidence-driven gate. Supports BOTH observed orderings:
+          (a) postcode asked upfront
+          (b) delivery method first, postcode rendered conditionally afterwards
+        Every sub-action records a Meta delta. Nothing is assumed about the platform.
         """
         out = {"attempted": False, "postcode": False, "delivery": False, "payment_reached": False}
         snap = self._snapshot_gate(page)
@@ -2317,19 +2424,48 @@ originalPermissionsQuery(parameters)
             logger.info(f"[FULFIL/{runner_name}] No fulfilment gate evidenced on {page.url}. Not acting.")
             return out
         out["attempted"] = True
+
+        # Pass 1 — postcode only if already rendered (upfront-ask platforms).
         if m.get("asks_postcode"):
             out["postcode"] = self._enter_postcode(page, merged_log, runner_name)
             self._record_meta_delta(merged_log, all_requests, page, "after_postcode")
             caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=15)
             self._merge_funnel_captures(merged_log, caps, "after_postcode")
+
+        # Pass 2 — delivery method. On SFCC this RENDERS the postcode field.
         out["delivery"] = self._select_delivery_option(page, merged_log, runner_name)
         self._record_meta_delta(merged_log, all_requests, page, "after_delivery")
         caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=15)
         self._merge_funnel_captures(merged_log, caps, "after_delivery")
+
+        # Pass 3 — re-check: did the delivery choice reveal a postcode field?
+        if not out["postcode"]:
+            post = self._snapshot_gate(page)
+            if post.get("markers", {}).get("asks_postcode"):
+                logger.info(f"[FULFIL/{runner_name}] Postcode field appeared AFTER delivery selection. Filling now.")
+                out["postcode"] = self._enter_postcode(page, merged_log, runner_name)
+                self._record_meta_delta(merged_log, all_requests, page, "after_postcode")
+                caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=15)
+                self._merge_funnel_captures(merged_log, caps, "after_postcode")
+
+        # Pass 4 — forward control. Stops at payment. Never pays.
         out["payment_reached"] = self._continue_to_payment(page, merged_log, runner_name)
         self._record_meta_delta(merged_log, all_requests, page, "after_continue")
         caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=20)
         self._merge_funnel_captures(merged_log, caps, "payment_gate")
+
+        # Pass 5 — one bounded retry if a required postcode is still outstanding.
+        if not out["payment_reached"]:
+            late = self._snapshot_gate(page)
+            if late.get("markers", {}).get("asks_postcode") and not out["postcode"]:
+                logger.info(f"[FULFIL/{runner_name}] Forward blocked with postcode outstanding. Retry once.")
+                out["postcode"] = self._enter_postcode(page, merged_log, runner_name)
+                self._record_meta_delta(merged_log, all_requests, page, "after_postcode_retry")
+                out["payment_reached"] = self._continue_to_payment(page, merged_log, runner_name)
+                self._record_meta_delta(merged_log, all_requests, page, "after_continue_retry")
+                caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=20)
+                self._merge_funnel_captures(merged_log, caps, "payment_gate_retry")
+
         final = self._snapshot_gate(page)
         merged_log["checkout_snapshot"] = final
         _bs = self._read_basket_state(page)
@@ -2337,6 +2473,7 @@ originalPermissionsQuery(parameters)
         logger.info(f"[BASKET/{runner_name}] fulfilment_final: {json.dumps(_bs, default=str)[:600]}")
         logger.info(f"[FULFIL/{runner_name}] RESULT {json.dumps(out)} url={final.get('url')} markers={json.dumps(final.get('markers',{}))}")
         return out
+
 
     def _attempt_checkout_click(self, page) -> bool:
         """
@@ -2486,6 +2623,19 @@ originalPermissionsQuery(parameters)
                     # No verified checkout for this selector; try the next one
             except Exception:
                 continue
+
+        # SPA settle: client-side routing can outrun the verification window.
+        try:
+            time.sleep(4)
+            settled = (page.url or "").lower()
+            if any(m in settled for m in ("checkout", "/basket/fulfilment", "/basket/payment",
+                                          "/basket/delivery", "/basket/summary",
+                                          "/on/demandware.store")):
+                self._last_checkout_snapshot = self._snapshot_gate(page)
+                logger.info(f"[FUNNEL] Checkout confirmed after SPA settle: {page.url}")
+                return True
+        except Exception:
+            pass
         logger.info("[FUNNEL] Checkout: no selector verified a checkout navigation or XHR")
         return False
 
@@ -2656,19 +2806,19 @@ originalPermissionsQuery(parameters)
             if product_url.rstrip("/") != landing_url.rstrip("/"):
                 page.goto(product_url, wait_until="domcontentloaded", timeout=45000)
                 time.sleep(3)
-                merged_log["funnel_steps"].append({"step": 2, "url": product_url, "status": "landed"})
-                # Network config bundle extraction FIRST
-                if not merged_log.get("detected_pixel_id"):
-                    net_pid = self._extract_pixel_id_from_network(all_requests)
-                    if net_pid:
-                        merged_log["detected_pixel_id"] = net_pid
-                        merged_log["meta_config_seen"] = True
-                        merged_log["pixel_id_source"] = "network_config_bundle"
-                        merged_log["engine_used"] = f"funnel_{runner_name}_network"
-                        logger.info(f"[FUNNEL/{runner_name}] Pixel from network config (product): {net_pid}")
-                captures = self._wait_for_fbq_and_capture(page, all_requests, timeout=15)
-                merged_log = self._merge_funnel_captures(merged_log, captures, "product")
-                self._record_meta_delta(merged_log, all_requests, page, "product")
+            merged_log["funnel_steps"].append({"step": 2, "url": product_url, "status": "landed"})
+            # Network config bundle extraction FIRST
+            if not merged_log.get("detected_pixel_id"):
+                net_pid = self._extract_pixel_id_from_network(all_requests)
+                if net_pid:
+                    merged_log["detected_pixel_id"] = net_pid
+                    merged_log["meta_config_seen"] = True
+                    merged_log["pixel_id_source"] = "network_config_bundle"
+                    merged_log["engine_used"] = f"funnel_{runner_name}_network"
+                    logger.info(f"[FUNNEL/{runner_name}] Pixel from network config (product): {net_pid}")
+            captures = self._wait_for_fbq_and_capture(page, all_requests, timeout=15)
+            merged_log = self._merge_funnel_captures(merged_log, captures, "product")
+            self._record_meta_delta(merged_log, all_requests, page, "product")
         except Exception as e:
             logger.warning(f"[FUNNEL/{runner_name}] Product load failed: {e}")
         product_content = page.content()
@@ -2899,6 +3049,7 @@ originalPermissionsQuery(parameters)
             "config_bundle_urls": [r["url"] for r in config_bundle_hits[:3]],
         }
         merged_log["meta_fb_observations"] = meta_fb_summary
+        merged_log["tracking_diagnostics"] = self._dump_tracking_diagnostics(page, all_requests)
         logger.warning(f"[FUNNEL/{runner_name}] META_FB_OBSERVATIONS: {json.dumps(meta_fb_summary, default=str)[:2000]}")
         logger.info(f"[FUNNEL/{runner_name}] Complete. pixel={merged_log.get('detected_pixel_id')}, "
                     f"events={merged_log.get('fbq_events_observed')}, "
@@ -3222,6 +3373,9 @@ originalPermissionsQuery(parameters)
                         "checkout_snapshot",
                         "fbq_events_with_event_id",
                         "session_fingerprint",
+                        "fbq_raw_calls",
+                        "fbq_call_types",
+                        "tracking_diagnostics",
                     ):
                         if funnel.get(_k) not in (None, [], {}, ""):
                             final_log[_k] = funnel[_k]
