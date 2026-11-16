@@ -68,3 +68,6 @@ output
 # Runtime artifacts
 .coverage
 waf_forensics.json
+*.bak.*
+_repair_l2.py
+__pycache__/
