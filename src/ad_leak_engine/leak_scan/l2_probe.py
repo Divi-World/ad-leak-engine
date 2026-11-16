@@ -103,61 +103,73 @@ FUNNEL_MAX_ITEMS = _env_int("ADLEAK_FUNNEL_MAX_ITEMS", 4, 1, 8)
 # ---------------------------------------------------------------------- #
 FBQ_INTERCEPTOR_JS = r"""
 (function() {
-if (window.__fbq_interceptor_installed) return;
-window.__fbq_interceptor_installed = true;
-window.__fbq_captured = [];
-var real_fbq = null;
-try { real_fbq = window.fbq; } catch (e) {}
-function safe_clone(x) {
-try { return JSON.parse(JSON.stringify(x)); }
-catch (e) { return String(x); }
-}
-function capture(call_type, args) {
-try {
-var record = {
-ts: Date.now(),
-call_type: call_type,
-args: [],
-};
-for (var i = 0; i < args.length; i++) {
-if (args[i] !== null && typeof args[i] === 'object') {
-record.args.push(safe_clone(args[i]));
-} else {
-record.args.push(args[i]);
-}
-}
-window.__fbq_captured.push(record);
-} catch (e) { /* never break the page */ }
-}
-function proxy_fbq() {
-try {
-var args = Array.prototype.slice.call(arguments);
-if (args.length > 0 && typeof args[0] === 'string') {
-capture(args[0], args.slice(1));
-}
-} catch (e) {}
-if (real_fbq && typeof real_fbq === 'function') {
-return real_fbq.apply(window, arguments);
-}
-}
-if (real_fbq) {
-for (var k in real_fbq) {
-try { proxy_fbq[k] = real_fbq[k]; } catch (e) {}
-}
-}
-proxy_fbq.queue = [];
-proxy_fbq.loaded = true;
-proxy_fbq.version = '2.0';
-proxy_fbq._captured = window.__fbq_captured;
-Object.defineProperty(window, 'fbq', {
-configurable: true,
-get: function() { return proxy_fbq; },
-set: function(v) {
-if (typeof v === 'function' && v !== proxy_fbq) {
-real_fbq = v;
-}
-},
-});
+  if (window.__fbq_interceptor_installed) return;
+  window.__fbq_interceptor_installed = true;
+  window.__fbq_captured = [];
+  window.__fbq_meta = {mode:'transparent', assignments:0, real_impl_seen:false, loader_scripts:0};
+  var cache = new WeakMap();
+
+  function clone(x){ try { return JSON.parse(JSON.stringify(x)); } catch(e){ return String(x); } }
+
+  function record(args){
+    try {
+      var a = args, form = 'call';
+      if (a.length === 1 && Array.isArray(a[0])) { a = a[0]; form = 'push'; }
+      if (!a || !a.length || typeof a[0] !== 'string') return;
+      var r = {ts: Date.now(), call_type: a[0], form: form, args: []};
+      for (var i=1;i<a.length;i++){
+        var v = a[i];
+        r.args.push(v !== null && typeof v === 'object' ? clone(v) : v);
+      }
+      window.__fbq_captured.push(r);
+    } catch(e){}
+  }
+
+  function wrap(fn){
+    if (typeof fn !== 'function') return fn;
+    if (cache.has(fn)) return cache.get(fn);
+    var p;
+    var h = {
+      apply: function(t, th, args){ record(args); return Reflect.apply(t, th, args); },
+      get:   function(t, k){ var v = t[k]; return (v === t) ? p : v; },
+      set:   function(t, k, v){
+               if (k === 'callMethod' || k === 'instance') window.__fbq_meta.real_impl_seen = true;
+               t[k] = v; return true;
+             }
+    };
+    p = new Proxy(fn, h);
+    cache.set(fn, p);
+    return p;
+  }
+
+  function trap(name){
+    var cur;
+    try {
+      Object.defineProperty(window, name, {
+        configurable: true,
+        get: function(){ return cur; },
+        set: function(v){
+          window.__fbq_meta.assignments++;
+          if (v && (v.callMethod || v.instance)) window.__fbq_meta.real_impl_seen = true;
+          cur = wrap(v);
+        }
+      });
+    } catch(e){}
+  }
+  trap('fbq'); trap('_fbq');
+
+  try {
+    new MutationObserver(function(muts){
+      for (var i=0;i<muts.length;i++){
+        var ns = muts[i].addedNodes || [];
+        for (var j=0;j<ns.length;j++){
+          var n = ns[j];
+          if (n && n.tagName === 'SCRIPT' && /fbevents\.js/.test(n.src || ''))
+            window.__fbq_meta.loader_scripts++;
+        }
+      }
+    }).observe(document, {childList:true, subtree:true});
+  } catch(e){}
 })();
 """
 
@@ -249,21 +261,38 @@ class L2LiveProbe:
         deadline = time.time() + timeout
         fb_js_loaded = False
         captures = []
+        absent_since = None
         while time.time() < deadline:
             if not fb_js_loaded:
                 fb_js_loaded = any(
-                    "connect.facebook.net" in str(r.get("url", ""))
-                    and "fbevents.js" in str(r.get("url", ""))
+                    "fbevents.js" in str(r.get("url", ""))
                     for r in all_requests if isinstance(r, dict)
                 )
+            state = {}
             try:
                 captures = page.evaluate("window.__fbq_captured || []")
                 if captures:
                     logger.info(f"[FBQ_WAIT] Captured {len(captures)} fbq call(s) after "
                                 f"{timeout - (deadline - time.time()):.1f}s")
                     return captures
+                state = page.evaluate("""() => ({
+                    shim: !!window.__fbq_interceptor_installed,
+                    loaders: (window.__fbq_meta && window.__fbq_meta.loader_scripts) || 0,
+                    fn: typeof window.fbq
+                })""") or {}
             except Exception:
                 captures = []
+            # Evidence-based early exit: shim active, no fbq, no loader script, no request.
+            if (state.get("shim") and state.get("fn") == "undefined"
+                    and not state.get("loaders") and not fb_js_loaded):
+                if absent_since is None:
+                    absent_since = time.time()
+                elif time.time() - absent_since >= 3.0:
+                    logger.info(f"[FBQ_WAIT] Proven absent after {time.time() - (deadline - timeout):.1f}s "
+                                f"— early exit, no dead wait.")
+                    return []
+            else:
+                absent_since = None
             time.sleep(0.5)
 
         # Last-resort synthesis: fbevents.js loaded but no fbq('init') was called.
@@ -797,6 +826,10 @@ originalPermissionsQuery(parameters)
         try:
             with InvisiblePlaywright(seed=42) as browser:
                 page = browser.new_page()
+                try:
+                    page.add_init_script(FBQ_INTERCEPTOR_JS)
+                except Exception as e:
+                    logger.debug(f"[INVISIBLE] fbq interceptor install skipped: {e}")
                 requests_log = []
 
                 def on_request(req):
@@ -2174,7 +2207,7 @@ originalPermissionsQuery(parameters)
                         out_of_stock: low.includes('out of stock'),
                         basket_empty: /basket is empty|cart is empty|bag is empty/i.test(low),
                         login_required: /sign in to continue|log in to continue|create an account to continue/i.test(low),
-                        error_visible: /please enter a valid|invalid post ?code|no results found|address not found/i.test(low),
+                        error_visible: /please enter a valid|please enter your post ?code|invalid post ?code|no results found|address not found|something went wrong|please try again|is required|enter a valid/i.test(low),
                     },
                     body_snippet: body.slice(0, 500),
                 };
@@ -2299,10 +2332,16 @@ originalPermissionsQuery(parameters)
             return False
 
         changed = (after.get("body_snippet") != snap.get("body_snippet")) or bool(after.get("radios"))
-        ok = bool(submitted) and not after.get("markers", {}).get("error_visible") and changed
+        _pc_norm = pc.replace(" ", "").upper()
+        _pc_persisted = any(
+            str(f.get("value", "")).replace(" ", "").upper() == _pc_norm
+            for f in (after.get("inputs") or [])
+        )
+        _err_now = bool(after.get("markers", {}).get("error_visible"))
+        ok = bool(submitted) and not _err_now and _pc_persisted
         merged_log["fulfilment_steps"].append({
             "action": "postcode_submitted", "value_used": pc, "submitted": submitted,
-            "state_changed": changed, "accepted_no_error": ok, **after,
+            "state_changed": changed, "value_persisted": _pc_persisted, "error_visible": _err_now, "accepted_no_error": ok, **after,
         })
         logger.info(f"[FULFIL/{runner_name}] postcode='{pc}' submitted={submitted} changed={changed} no_error={ok} url={after.get('url')}")
         return ok
@@ -2706,6 +2745,27 @@ originalPermissionsQuery(parameters)
             page.on("response", on_response)
 
         attach_listener()
+        # Blocked != absent. Capture attempts and failures, not just responses.
+        def _on_req(req):
+            try:
+                merged_log.setdefault("request_attempts", []).append(
+                    {"url": req.url, "method": req.method, "rt": req.resource_type})
+            except Exception:
+                pass
+
+        def _on_reqfailed(req):
+            try:
+                merged_log.setdefault("blocked_requests", []).append(
+                    {"url": req.url, "method": req.method,
+                     "rt": req.resource_type, "failure": req.failure})
+            except Exception:
+                pass
+
+        try:
+            page.on("request", _on_req)
+            page.on("requestfailed", _on_reqfailed)
+        except Exception as e:
+            logger.debug(f"[FUNNEL/{runner_name}] request listeners not attached: {e}")
         if callable(on_response_factory):
             try:
                 extra = on_response_factory(page, merged_log, all_requests)

@@ -31,10 +31,10 @@ app.conf.update(
     # Direct Mode: ~60-120s typical. Niche Mode: Can take 5-10 mins per batch.
     
     # Soft limit: Warns task at 300s (5 mins) - allows graceful logging
-    task_soft_time_limit=300,
+    task_soft_time_limit=1800,
 
     # Hard limit: Kills task at 360s (6 mins) - prevents infinite hang/zombies
-    task_time_limit=360,
+    task_time_limit=2100,
 
     # --- TRACKING ---
     task_track_started=True,
@@ -42,6 +42,6 @@ app.conf.update(
     # --- BROKER RESILIENCE ---
     broker_connection_retry_on_startup=True,
     broker_transport_options={
-        "visibility_timeout": 360, # Must match task_time_limit
+        "visibility_timeout": 2160, # Must match task_time_limit
     }
 )
