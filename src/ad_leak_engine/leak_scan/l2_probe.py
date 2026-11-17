@@ -36,6 +36,7 @@ from urllib.parse import urlparse, urljoin
 from src.ad_leak_engine.utils.managed_tor import ManagedTorDaemon
 from src.ad_leak_engine.utils.data_extractor import UniversalDataExtractor
 import hashlib
+from src.ad_leak_engine.leak_scan import pixel_forensics as pf
 from pathlib import Path
 import os
 
@@ -829,6 +830,14 @@ originalPermissionsQuery(parameters)
         return out
 
 
+    def _pixel_census(self, merged_log: dict) -> dict:
+        out = pf.build_census(merged_log, self._validate_pixel_via_config)
+        logger.info(f"[PIXEL_CENSUS] total={out['total_ids']} confirmed={out['confirmed_real']} "
+                    f"transmitting={out['transmitting']} static_only={out['static_only']}")
+        for r in out['pixels']:
+            logger.info(f"[PIXEL_CENSUS] {r['pixel_id']} | {r['verdict']} | {r['transmission']}")
+        return out
+
     def _harvest_all_pixel_ids(self, all_requests: list, merged_log: dict) -> list:
         """Advertisers run more than one pixel. Report every ID with its provenance."""
         found = {}
@@ -1130,6 +1139,11 @@ originalPermissionsQuery(parameters)
                         score = self._score_pixel_probability(m, "ASSET_VAR")
                         if score > 0.5:
                             candidates.append((m, score))
+                    for pid in pf.decode_obfuscated_ids(body):
+                        score = self._score_pixel_probability(pid, "ASSET_OBFUSCATED")
+                        if score > 0.5:
+                            candidates.append((pid, score))
+                            logger.info(f"[ASSET_DECODE] recovered pixel={pid}")
             except Exception as e:
                 logger.debug(f"[UNIVERSAL_SCAN] Failed {asset_url}: {e}")
         best = {}
@@ -3249,6 +3263,15 @@ originalPermissionsQuery(parameters)
                     merged_log["pixel_fired"] = True
                     _m_id = RE_TR_PIXEL_ID.search(req_url)
                     _m_ev = RE_TR_EVENT.search(req_url)
+                    if not _m_id or not _m_ev:
+                        try:
+                            _fid, _fev = pf.post_form_meta(response.request.post_data)
+                            if _fid and not _m_id:
+                                _m_id = re.search(r"(\d{10,16})", _fid)
+                            if _fev and not _m_ev:
+                                _m_ev = re.search(r"([A-Za-z][A-Za-z0-9_]{1,60})", _fev)
+                        except Exception:
+                            pass
                     merged_log.setdefault("meta_tr_events", []).append({
                         "pixel_id": _m_id.group(1) if _m_id else None,
                         "event": _m_ev.group(1) if _m_ev else None,
@@ -3686,6 +3709,14 @@ originalPermissionsQuery(parameters)
         merged_log["first_party_meta_hits"] = _fp_hits
         if _fp_hits:
             logger.info(f"[FIRST_PARTY_META] {json.dumps(_fp_hits)[:900]}")
+<<<<<<< HEAD
+=======
+        merged_log["pixel_census"] = self._pixel_census(merged_log)
+        _cen = merged_log["pixel_census"]
+        if _cen.get("primary_pixel_id") and not merged_log.get("detected_pixel_id"):
+            merged_log["detected_pixel_id"] = _cen["primary_pixel_id"]
+        merged_log["pixel_validations"] = _cen.get("all_validations") or merged_log.get("pixel_validations")
+>>>>>>> e3f6cac (L2: Camoufox main-realm parity, first-party Meta signatures, engine logger, dedup guard)
         merged_log["meta_fb_observations"] = meta_fb_summary
         merged_log["tracking_diagnostics"] = self._dump_tracking_diagnostics(page, all_requests)
         logger.warning(f"[FUNNEL/{runner_name}] META_FB_OBSERVATIONS: {json.dumps(meta_fb_summary, default=str)[:2000]}")
@@ -4070,6 +4101,7 @@ originalPermissionsQuery(parameters)
                         "fbq_raw_calls",
                         "fbq_call_types",
                         "tracking_diagnostics",
+                        "pixel_census",
                         "per_pixel",
                         "pixel_evidence_grade",
                         "payment_stage",
