@@ -40,7 +40,7 @@ from pathlib import Path
 import os
 
 # --- CRITICAL FIX: Define Logger BEFORE any usage ---
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ad_leak_engine.leak_scan.l2_probe")  # child of engine logger -> reaches logs/engine.log
 
 # External Libs
 try:
@@ -50,6 +50,7 @@ except ImportError:
 
 try:
     from camoufox.sync_api import Camoufox
+    from camoufox import DefaultAddons
     CAMOUFOX_AVAILABLE = True
 except ImportError:
     CAMOUFOX_AVAILABLE = False
@@ -75,6 +76,9 @@ RE_CAPI_URL = re.compile(r'graph\.facebook\.com/v\d+\.\d+/(\d+)/events')
 RE_CONFIG_BUNDLE = re.compile(r'connect\.facebook\.net/signals/config/(\d{8,})')
 RE_TR_PIXEL_ID = re.compile(r'[?&]id=(\d{8,})')
 RE_TR_EVENT = re.compile(r'[?&]ev=([^&]+)')
+# First-party / proxied Meta endpoints: signature, not domain.
+RE_ANY_CONFIG = re.compile(r'/signals/config/(\d{10,16})')
+RE_ANY_TR = re.compile(r'[?&]id=(\d{10,16})&[^#]*\bev=')
 
 # NEW: Advanced Patterns for Minified GTM Containers
 RE_GTM_MINIFIED_PIXEL = re.compile(r'["\'](?:pixelId|fb_pixel_id|metaPixelId|facebook_pixel_id)["\']\s*[:=]\s*["\']?(\d{10,16})["\']?', re.IGNORECASE)
@@ -175,6 +179,9 @@ FBQ_INTERCEPTOR_JS = r"""
 """
 
 def detect_capi_dedup_failure(telemetry) -> bool:
+    # A dedup failure is only meaningful when BOTH sides exist.
+    if not telemetry.get("capi_events"):
+        return False
     return not telemetry.get("has_shared_event_id", True)
 
 def detect_missing_initiate_checkout(telemetry) -> bool:
@@ -213,6 +220,32 @@ class L2LiveProbe:
     # ------------------------------------------------------------------ #
     # NEW: NETWORK-LEVEL PIXEL ID EXTRACTION
     # ------------------------------------------------------------------ #
+    def _mark_main_world(self, page):
+        """Register a Camoufox page whose scripts run in the MAIN realm."""
+        if not hasattr(self, "_mw_page_ids"):
+            self._mw_page_ids = set()
+        self._mw_page_ids.add(id(page))
+        return page
+
+    def _mw(self, page, expression, arg=None):
+        """
+        Camoufox evaluates in an ISOLATED realm by default, so merchant JS
+        globals and our interceptor buffer are invisible. Proven by experiment:
+        prefixing 'mw:' routes evaluate into the MAIN realm. Chromium/Ghost
+        pages are never registered, so they are completely unaffected.
+        """
+        try:
+            if (isinstance(expression, str)
+                    and id(page) in getattr(self, "_mw_page_ids", set())
+                    and not expression.startswith("mw:")):
+                expression = "mw:" + expression
+        except Exception:
+            pass
+        if arg is None:
+            return page.evaluate(expression)
+        return page.evaluate(expression, arg)
+
+
     def _extract_pixel_id_from_network(self, all_requests) -> str | None:
         """
         Extract the Meta pixel ID from any captured network request.
@@ -271,12 +304,12 @@ class L2LiveProbe:
                 )
             state = {}
             try:
-                captures = page.evaluate("window.__fbq_captured || []")
+                captures = self._mw(page, "window.__fbq_captured || []")
                 if captures:
                     logger.info(f"[FBQ_WAIT] Captured {len(captures)} fbq call(s) after "
                                 f"{timeout - (deadline - time.time()):.1f}s")
                     return captures
-                state = page.evaluate("""() => ({
+                state = self._mw(page, """() => ({
                     shim: !!window.__fbq_interceptor_installed,
                     loaders: (window.__fbq_meta && window.__fbq_meta.loader_scripts) || 0,
                     fn: typeof window.fbq
@@ -301,7 +334,7 @@ class L2LiveProbe:
             logger.warning("[FBQ_WAIT] fbevents.js loaded but no fbq call captured. "
                            "Synthetic init ENABLED via ADLEAK_ALLOW_SYNTHETIC_FBQ=1.")
             try:
-                synthetic_pid = page.evaluate("""() => {
+                synthetic_pid = self._mw(page, """() => {
                     if (typeof window._fbq !== 'undefined' && window._fbq) {
                         if (window._fbq._captured && window._fbq._captured.length > 0) return null;
                     }
@@ -319,7 +352,7 @@ class L2LiveProbe:
                     synthetic_pid = self._extract_pixel_id_from_network(all_requests)
                 if synthetic_pid:
                     logger.info(f"[FBQ_WAIT] Synthesizing fbq('init', '{synthetic_pid}')")
-                    page.evaluate(f"""() => {{
+                    self._mw(page, f"""() => {{
                         try {{
                             if (typeof fbq === 'function') {{
                                 fbq('init', '{synthetic_pid}');
@@ -328,7 +361,7 @@ class L2LiveProbe:
                         }} catch (e) {{ console.error('synth init failed', e); }}
                     }}""")
                     time.sleep(2)
-                    captures = page.evaluate("window.__fbq_captured || []")
+                    captures = self._mw(page, "window.__fbq_captured || []")
                     for _c in (captures or []):
                         if isinstance(_c, dict):
                             _c["synthetic"] = True
@@ -753,7 +786,7 @@ originalPermissionsQuery(parameters)
         """
         out = {"reached": False, "providers": [], "card_surface": [], "url": page.url}
         try:
-            probe = page.evaluate("""() => {
+            probe = self._mw(page, """() => {
                 const srcs = Array.from(document.querySelectorAll('iframe[src]')).map(f => f.src);
                 const html = document.documentElement.innerHTML.toLowerCase();
                 const names = ['stripe','adyen','braintree','paypal','klarna','checkout.com',
@@ -956,7 +989,7 @@ originalPermissionsQuery(parameters)
                 except Exception:
                     continue
         try:
-            st = page.evaluate("""() => {
+            st = self._mw(page, """() => {
                 const dl = Array.isArray(window.dataLayer) ? window.dataLayer : [];
                 let seen = 0, granted = false;
                 for (const e of dl) {
@@ -979,7 +1012,7 @@ originalPermissionsQuery(parameters)
                 for t in _pt
             )
             try:
-                _ck = page.evaluate("() => (document.cookie.match(/OptanonConsent=([^;]*)/)||[])[1] || ''") or ""
+                _ck = self._mw(page, "() => (document.cookie.match(/OptanonConsent=([^;]*)/)||[])[1] || ''") or ""
                 import urllib.parse as _up
                 _dec = _up.unquote(_ck)
                 out["optanon_groups"] = (_dec.split("groups=")[1].split("&")[0] if "groups=" in _dec else None)
@@ -1146,13 +1179,15 @@ originalPermissionsQuery(parameters)
             "fbq_events_observed": [],
         }
         try:
-            with Camoufox(headless=False) as browser:
+            with Camoufox(headless=False, main_world_eval=True,
+                exclude_addons=[DefaultAddons.UBO]) as browser:
                 context = browser.new_context()
                 try:
-                    context.add_init_script(FBQ_INTERCEPTOR_JS)
+                    context.add_init_script("mw:" + FBQ_INTERCEPTOR_JS)
                 except Exception as e:
                     logger.debug(f"[CAMOUFOX] fbq interceptor install skipped: {e}")
                 page = context.new_page()
+                self._mark_main_world(page)
                 requests_log = []
 
                 def on_response(response):
@@ -1227,7 +1262,7 @@ originalPermissionsQuery(parameters)
                             f"pixel={network_log.get('detected_pixel_id')}, "
                             f"events={enriched.get('fbq_events_observed')}")
                 if not network_log.get("detected_pixel_id"):
-                    dom_pid = page.evaluate("""() => {
+                    dom_pid = self._mw(page, """() => {
                         if (typeof fbq !== 'undefined' && fbq.queue) {
                             for(let i=0; i<fbq.queue.length; i++) {
                                 let item = fbq.queue[i];
@@ -1800,7 +1835,7 @@ originalPermissionsQuery(parameters)
     def _read_basket_state(self, page) -> dict:
         """Observable basket facts only. No inference about the platform."""
         try:
-            return page.evaluate("""() => {
+            return self._mw(page, """() => {
                 const norm = s => (s||'').replace(/\\s+/g,' ').trim();
                 const body = norm(document.body.innerText || '');
                 const cnt = body.match(/your (?:order|basket|bag|cart)\\s*\\((\\d+)\\s*item/i);
@@ -1832,7 +1867,7 @@ originalPermissionsQuery(parameters)
     def _discover_product_candidates(self, page, base_url: str, limit: int = 12) -> list[str]:
         """Same-origin product URLs visible on the current page. Deduped, ordered."""
         try:
-            hrefs = page.evaluate("""() => Array.from(document.querySelectorAll('a[href]'))
+            hrefs = self._mw(page, """() => Array.from(document.querySelectorAll('a[href]'))
                 .filter(a => (a.offsetWidth || a.offsetHeight))
                 .map(a => a.getAttribute('href'))""") or []
         except Exception:
@@ -1990,7 +2025,7 @@ originalPermissionsQuery(parameters)
         # Snapshot cart-count observable so we can prove ATC by state change
         def _read_cart_count():
             try:
-                return page.evaluate("""() => {
+                return self._mw(page, """() => {
                     const sels = ['[data-cart-count]','.cart-count','.js-cart-count',
                         '.basket-count','.minicart-quantity',
                         '[data-testid*="cart-count"]','[data-testid*="basket-count"]',
@@ -2069,7 +2104,7 @@ originalPermissionsQuery(parameters)
 
         def _dispatch_click(btn):
             """
-            Dispatch a click via page.evaluate("el.click()") instead of
+            Dispatch a click via self._mw(page, "el.click()") instead of
             Playwright's Locator.click(). Proven necessary on SFCC:
             Locator.click() times out on the ATC button because the button
             has a zero-size bounding rect and a OneTrust consent overlay
@@ -2102,7 +2137,7 @@ originalPermissionsQuery(parameters)
         # Tier A — form-targeted (SFCC / Magento / Presta / ASP.NET / OpenCart)
         # ============================================================
         try:
-            forms_info = page.evaluate("""() => {
+            forms_info = self._mw(page, """() => {
                 const ADD_FORM_RE = /(add|addproduct|addtocart|cart[\\/]?add|basket[\\/]?add)/i;
                 const out = [];
                 document.querySelectorAll('form').forEach((f, i) => {
@@ -2189,7 +2224,7 @@ originalPermissionsQuery(parameters)
         # to basket")
         # ============================================================
         try:
-            text_candidates = page.evaluate("""() => {
+            text_candidates = self._mw(page, """() => {
                 const ATC_RE = /\\badd\\s*(to\\s*)?(bag|basket|cart|trolley)?\\b|^add$|\\badd item\\b/i;
                 const NEG_RE = /search|sign[\\s-]?in|log[\\s-]?in|subscribe|newsletter|apply|filter|sort|continue|go back|checkout|compare|wish ?list|remove|delete/i;
                 document.querySelectorAll('button, a[role="button"], button[role="button"], [role="button"]').forEach((el) => {
@@ -2240,7 +2275,7 @@ originalPermissionsQuery(parameters)
         # Tier D — data-attribute sweep (headless / Next.js / custom)
         # ============================================================
         try:
-            attr_candidates = page.evaluate("""() => {
+            attr_candidates = self._mw(page, """() => {
                 const ATTR_RE = /add.*(cart|bag|basket)|addtocart/i;
                 let n = 0;
                 document.querySelectorAll('button, a, [role="button"], input[type="submit"]').forEach((el) => {
@@ -2305,7 +2340,7 @@ originalPermissionsQuery(parameters)
         # We detect the select whose non-empty options share a long common prefix
         # AND whose options look size-ish (contain "year", "month", "size", clothing sizes).
         try:
-            sel_idx = page.evaluate("""() => {
+            sel_idx = self._mw(page, """() => {
                 const sels = Array.from(document.querySelectorAll('select'));
                 for (let i = 0; i < sels.length; i++) {
                     const opts = Array.from(sels[i].options || [])
@@ -2434,7 +2469,7 @@ originalPermissionsQuery(parameters)
         except Exception:
             return False
         try:
-            sel_info = page.evaluate("""(sku) => {
+            sel_info = self._mw(page, """(sku) => {
                 const sels = Array.from(document.querySelectorAll('select'));
                 for (let i = 0; i < sels.length; i++) {
                     const opts = Array.from(sels[i].options || []);
@@ -2475,7 +2510,7 @@ originalPermissionsQuery(parameters)
         than silence.
         """
         try:
-            return page.evaluate("""() => {
+            return self._mw(page, """() => {
                 const out = {buttons: [], selects: [], shadow_hosts: 0, iframes: 0};
                 document.querySelectorAll('button, a[role="button"], [role="button"], input[type="submit"]').forEach((el) => {
                     const text = ((el.innerText || el.textContent || el.value || '') + '').trim().slice(0, 60);
@@ -2537,7 +2572,7 @@ originalPermissionsQuery(parameters)
         except Exception as e:
             diag["request_scan_error"] = str(e)
         try:
-            state = page.evaluate("""() => {
+            state = self._mw(page, """() => {
                 const ck = document.cookie.split(';').map(s => s.trim().split('=')[0]);
                 const out = {cmp: {}, fbq_state: {}};
                 out.cmp = {
@@ -2613,7 +2648,7 @@ originalPermissionsQuery(parameters)
     def _snapshot_gate(self, page) -> dict:
         """Evidence-driven control inventory. Replaces keyword-only guessing."""
         try:
-            return page.evaluate("""() => {
+            return self._mw(page, """() => {
                 const norm = s => (s||'').replace(/\\s+/g,' ').trim();
                 const vis = el => !!(el.offsetWidth || el.offsetHeight);
                 const inputs = [];
@@ -3099,7 +3134,7 @@ originalPermissionsQuery(parameters)
                                 # assumed about the site — it just captures what is on
                                 # the page at this moment.
                                 try:
-                                    snapshot = page.evaluate("""() => {
+                                    snapshot = self._mw(page, """() => {
                                         const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
                                         const buttons = [];
                                         document.querySelectorAll('button, a[role="button"], [role="button"]').forEach((el) => {
@@ -3632,6 +3667,25 @@ originalPermissionsQuery(parameters)
         if _best_src:
             merged_log["pixel_id_source"] = _best_src
             merged_log["detected_pixel_id"] = _best_pid
+        # Sweep for Meta signatures on ANY host. Advertisers proxy fbevents/tr
+        # through first-party collectors, which domain matching cannot see.
+        _fp_hits = []
+        for _r in all_requests:
+            if not isinstance(_r, dict):
+                continue
+            _u = str(_r.get("url", ""))
+            if "facebook" in _u:
+                continue
+            _m = RE_ANY_CONFIG.search(_u) or RE_ANY_TR.search(_u)
+            if _m:
+                _fp_hits.append({"url": _u[:300], "pixel_id": _m.group(1)})
+                merged_log["meta_config_seen"] = True
+                if not merged_log.get("detected_pixel_id"):
+                    merged_log["detected_pixel_id"] = _m.group(1)
+                    merged_log["pixel_id_source"] = "first_party_proxy"
+        merged_log["first_party_meta_hits"] = _fp_hits
+        if _fp_hits:
+            logger.info(f"[FIRST_PARTY_META] {json.dumps(_fp_hits)[:900]}")
         merged_log["meta_fb_observations"] = meta_fb_summary
         merged_log["tracking_diagnostics"] = self._dump_tracking_diagnostics(page, all_requests)
         logger.warning(f"[FUNNEL/{runner_name}] META_FB_OBSERVATIONS: {json.dumps(meta_fb_summary, default=str)[:2000]}")
@@ -3647,13 +3701,15 @@ originalPermissionsQuery(parameters)
         if CAMOUFOX_AVAILABLE:
             logger.info(f"[FUNNEL] Attempting with Camoufox for {landing_url}")
             try:
-                with Camoufox(headless=False) as browser:
+                with Camoufox(headless=False, main_world_eval=True,
+                    exclude_addons=[DefaultAddons.UBO]) as browser:
                     context = browser.new_context()
                     try:
-                        context.add_init_script(FBQ_INTERCEPTOR_JS)
+                        context.add_init_script("mw:" + FBQ_INTERCEPTOR_JS)
                     except Exception:
                         pass
                     page = context.new_page()
+                    self._mark_main_world(page)
                     all_requests = []
 
                     def factory():
@@ -4056,7 +4112,7 @@ originalPermissionsQuery(parameters)
 
     def _simulate_human_scroll(self, page):
         try:
-            height = page.evaluate("document.body.scrollHeight")
+            height = self._mw(page, "document.body.scrollHeight")
             steps = 5
             step_height = height // steps
             for i in range(steps):
