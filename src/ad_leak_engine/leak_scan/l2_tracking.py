@@ -150,6 +150,17 @@ class L2TrackingScanner(AbstractLeakScanner):
             or detected_browser_pixel_id
         )
 
+        # [SEED:2399] Multi-pixel + funnel evidence. Never collapse to one ID.
+        _probe_pixel_set = (net_log.get("detected_pixel_ids") or raw.get("detected_pixel_ids") or [])
+        _probe_pixel_validations = (net_log.get("pixel_validations") or raw.get("pixel_validations") or [])
+        _probe_per_pixel = (net_log.get("per_pixel") or raw.get("per_pixel") or {})
+        _probe_evidence_grade = (net_log.get("pixel_evidence_grade") or raw.get("pixel_evidence_grade"))
+        _probe_payment_stage = (net_log.get("payment_stage") or raw.get("payment_stage") or {})
+        _probe_blockers = (net_log.get("checkout_blockers") or raw.get("checkout_blockers") or [])
+        _probe_boundary = (net_log.get("boundary_evidence") or raw.get("boundary_evidence") or [])
+        _probe_consent = (net_log.get("consent_at_gate") or raw.get("consent_at_gate") or {})
+        _probe_blocked_requests = (net_log.get("blocked_requests") or raw.get("blocked_requests") or [])
+
         # [FIX-2399] Surface the probe's Meta-side validation and tracking-mode
         # inference. Both are produced by probe()/probe_funnel() and are None-safe.
         _probe_pixel_validation = (
@@ -221,6 +232,15 @@ class L2TrackingScanner(AbstractLeakScanner):
                         "tracking_architecture": "UNKNOWN_SECURED",
                         "capi_sniffer_status": "BLOCKED_BY_WALL",
                         "detected_pixel_id": primary_pixel_id,
+                        "detected_pixel_ids": _probe_pixel_set,
+                        "pixel_validations": _probe_pixel_validations,
+                        "per_pixel": _probe_per_pixel,
+                        "pixel_evidence_grade": _probe_evidence_grade,
+                        "payment_stage": _probe_payment_stage,
+                        "checkout_blockers": _probe_blockers,
+                        "boundary_evidence": _probe_boundary,
+                        "consent_at_gate": _probe_consent,
+                        "blocked_requests": _probe_blocked_requests,
                         "pixel_validation": _probe_pixel_validation,          # [FIX-2399]
                         "tracking_mode_inferred": _probe_tracking_mode,       # [FIX-2399]
                         "observed_events": _probe_fbq_events,                 # [FIX-2399]
@@ -246,6 +266,15 @@ class L2TrackingScanner(AbstractLeakScanner):
                     "tracking_architecture": tracking_architecture,
                     "capi_sniffer_status": "ACTIVE_SNIFFING_FAILED_BLOCKED",
                     "detected_pixel_id": primary_pixel_id,
+                    "detected_pixel_ids": _probe_pixel_set,
+                    "pixel_validations": _probe_pixel_validations,
+                    "per_pixel": _probe_per_pixel,
+                    "pixel_evidence_grade": _probe_evidence_grade,
+                    "payment_stage": _probe_payment_stage,
+                    "checkout_blockers": _probe_blockers,
+                    "boundary_evidence": _probe_boundary,
+                    "consent_at_gate": _probe_consent,
+                    "blocked_requests": _probe_blocked_requests,
                     "pixel_validation": _probe_pixel_validation,          # [FIX-2399]
                     "tracking_mode_inferred": _probe_tracking_mode,       # [FIX-2399]
                     "observed_events": _probe_fbq_events,                 # [FIX-2399]
@@ -272,6 +301,15 @@ class L2TrackingScanner(AbstractLeakScanner):
                         "analyzed_requests_count": req_count,
                         "forensic_note": f"{req_count} network requests captured, but zero Meta Pixel/CAPI signatures found. High probability of Enterprise-grade Bot Cloaking serving sanitized HTML to automated probes.",
                         "detected_pixel_id": primary_pixel_id,                # [FIX-2399] was None
+                        "detected_pixel_ids": _probe_pixel_set,
+                        "pixel_validations": _probe_pixel_validations,
+                        "per_pixel": _probe_per_pixel,
+                        "pixel_evidence_grade": _probe_evidence_grade,
+                        "payment_stage": _probe_payment_stage,
+                        "checkout_blockers": _probe_blockers,
+                        "boundary_evidence": _probe_boundary,
+                        "consent_at_gate": _probe_consent,
+                        "blocked_requests": _probe_blocked_requests,
                         "pixel_validation": _probe_pixel_validation,          # [FIX-2399]
                         "tracking_mode_inferred": _probe_tracking_mode,       # [FIX-2399]
                         "observed_events": _probe_fbq_events,                 # [FIX-2399]
@@ -291,6 +329,15 @@ class L2TrackingScanner(AbstractLeakScanner):
                         "analyzed_requests_count": req_count,
                         "forensic_note": "Low request volume (<50) and zero FB/Meta API calls observed. Likely true absence of tracking.",
                         "detected_pixel_id": primary_pixel_id,                # [FIX-2399] was None
+                        "detected_pixel_ids": _probe_pixel_set,
+                        "pixel_validations": _probe_pixel_validations,
+                        "per_pixel": _probe_per_pixel,
+                        "pixel_evidence_grade": _probe_evidence_grade,
+                        "payment_stage": _probe_payment_stage,
+                        "checkout_blockers": _probe_blockers,
+                        "boundary_evidence": _probe_boundary,
+                        "consent_at_gate": _probe_consent,
+                        "blocked_requests": _probe_blocked_requests,
                         "pixel_validation": _probe_pixel_validation,          # [FIX-2399]
                         "tracking_mode_inferred": _probe_tracking_mode,       # [FIX-2399]
                         "observed_events": _probe_fbq_events,                 # [FIX-2399]
@@ -313,6 +360,15 @@ class L2TrackingScanner(AbstractLeakScanner):
                     "analyzed_requests_count": req_count,
                     "forensic_note": f"GTM Container ({net_log.get('gtm_id')}) detected. Pixel likely injected dynamically. Static analysis cannot confirm active firing without executing tags.",
                     "detected_pixel_id": primary_pixel_id,                    # [FIX-2399] was None
+                    "detected_pixel_ids": _probe_pixel_set,
+                    "pixel_validations": _probe_pixel_validations,
+                    "per_pixel": _probe_per_pixel,
+                    "pixel_evidence_grade": _probe_evidence_grade,
+                    "payment_stage": _probe_payment_stage,
+                    "checkout_blockers": _probe_blockers,
+                    "boundary_evidence": _probe_boundary,
+                    "consent_at_gate": _probe_consent,
+                    "blocked_requests": _probe_blocked_requests,
                     "pixel_validation": _probe_pixel_validation,              # [FIX-2399]
                     "tracking_mode_inferred": _probe_tracking_mode,           # [FIX-2399]
                     "observed_events": _probe_fbq_events,                     # [FIX-2399]
@@ -337,6 +393,15 @@ class L2TrackingScanner(AbstractLeakScanner):
                     "risk_factor": "Potential Data Loss if CAPI is missing on Checkout",
                     "forensic_note": f"Meta Pixel ({primary_pixel_id}) detected on Homepage. {scope_note}",
                     "detected_pixel_id": primary_pixel_id,
+                    "detected_pixel_ids": _probe_pixel_set,
+                    "pixel_validations": _probe_pixel_validations,
+                    "per_pixel": _probe_per_pixel,
+                    "pixel_evidence_grade": _probe_evidence_grade,
+                    "payment_stage": _probe_payment_stage,
+                    "checkout_blockers": _probe_blockers,
+                    "boundary_evidence": _probe_boundary,
+                    "consent_at_gate": _probe_consent,
+                    "blocked_requests": _probe_blocked_requests,
                     "pixel_label": "Primary Conversion Pixel", # NEW CONTEXT
                     "pixel_validation": _probe_pixel_validation,              # [FIX-2399]
                     "tracking_mode_inferred": _probe_tracking_mode,           # [FIX-2399]
@@ -359,6 +424,15 @@ class L2TrackingScanner(AbstractLeakScanner):
                     "capi_pixel_id": capi_pixel_id,
                     "forensic_note": "; ".join(capi_forensic_evidence[:3]) if capi_forensic_evidence else "Static Bundle Analysis Confirmed CAPI Presence.",
                     "detected_pixel_id": primary_pixel_id,
+                    "detected_pixel_ids": _probe_pixel_set,
+                    "pixel_validations": _probe_pixel_validations,
+                    "per_pixel": _probe_per_pixel,
+                    "pixel_evidence_grade": _probe_evidence_grade,
+                    "payment_stage": _probe_payment_stage,
+                    "checkout_blockers": _probe_blockers,
+                    "boundary_evidence": _probe_boundary,
+                    "consent_at_gate": _probe_consent,
+                    "blocked_requests": _probe_blocked_requests,
                     "pixel_label": "Server-Side Only Pixel",
                     "pixel_validation": _probe_pixel_validation,              # [FIX-2399]
                     "tracking_mode_inferred": _probe_tracking_mode,           # [FIX-2399]
@@ -420,6 +494,15 @@ class L2TrackingScanner(AbstractLeakScanner):
                             "tracking_architecture": tracking_architecture,
                             "capi_sniffer_status": "ACTIVE_PARSED" if capi_events_found else ("STATIC_INFERRED" if capi_detected_static else "ACTIVE_URL_ONLY"),
                             "detected_pixel_id": primary_pixel_id,
+                            "detected_pixel_ids": _probe_pixel_set,
+                            "pixel_validations": _probe_pixel_validations,
+                            "per_pixel": _probe_per_pixel,
+                            "pixel_evidence_grade": _probe_evidence_grade,
+                            "payment_stage": _probe_payment_stage,
+                            "checkout_blockers": _probe_blockers,
+                            "boundary_evidence": _probe_boundary,
+                            "consent_at_gate": _probe_consent,
+                            "blocked_requests": _probe_blocked_requests,
                             "pixel_validation": _probe_pixel_validation,          # [FIX-2399]
                             "tracking_mode_inferred": _probe_tracking_mode,       # [FIX-2399]
                             "probe_observed_events": _probe_fbq_events,           # [FIX-2399]

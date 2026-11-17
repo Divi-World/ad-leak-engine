@@ -42,7 +42,7 @@ class TelemetryCollector:
                 network_log = self.l2_probe.probe(url)
 
                 req_count = len(network_log.get("requests", [])) if isinstance(network_log, dict) else 0
-                waf_blocked = bool(network_log.get("waf_blocked", False))
+                waf_blocked = bool(network_log.get("waf_blocked")) or str(network_log.get("blocked_status") or "").upper() in ("CF_CHALLENGE_DETECTED","CF_CHALLENGE","CF_CHALLENGE_PERSISTENT","ENTERPRISE_WAF_BLOCKED")
 
                 # [FIX-2399] Success gate — trust the probe's own success signals.
                 # Previously this was `req_count > 0 and not waf_blocked`, which would
@@ -52,7 +52,7 @@ class TelemetryCollector:
                 # Meta-side validation confirmed the pixel is real.
                 probe_found_pixel = bool(network_log.get("detected_pixel_id")) if isinstance(network_log, dict) else False
                 probe_has_validation = bool(
-                    network_log.get("pixel_validation", {}).get("verdict") == "real_pixel_confirmed_by_config"
+                    (network_log.get("pixel_validation") or {}).get("verdict") == "real_pixel_confirmed_by_config"
                 ) if isinstance(network_log, dict) else False
 
                 probe_success = (
