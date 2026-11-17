@@ -36,6 +36,7 @@ from urllib.parse import urlparse, urljoin
 from src.ad_leak_engine.utils.managed_tor import ManagedTorDaemon
 from src.ad_leak_engine.utils.data_extractor import UniversalDataExtractor
 import hashlib
+from pathlib import Path
 import os
 
 # --- CRITICAL FIX: Define Logger BEFORE any usage ---
@@ -659,6 +660,12 @@ originalPermissionsQuery(parameters)
         btns = snap.get("buttons") or []
         inputs = snap.get("inputs") or []
         out = {"kind": None, "url": url, "guest_controls": [], "auth_markers": []}
+        for _ex in (merged_log.get("observed_exits") or []):
+            _eu = str(_ex.get("to", "")).lower()
+            if any(k in _eu for k in ("/login", "/signin", "/sign-in", "login_challenge", "/oauth", "/sso")):
+                if "auth_exit_observed" not in out["auth_markers"]:
+                    out["auth_markers"].append("auth_exit_observed")
+                out["auth_exit_url"] = _ex.get("to")
         if any(k in url for k in ("/login", "/signin", "/sign-in", "/auth",
                                   "login_challenge", "/oauth", "/sso", "/session")):
             out["auth_markers"].append("auth_url")
@@ -770,11 +777,16 @@ originalPermissionsQuery(parameters)
         m = snap.get("markers", {})
         out["url"] = snap.get("url")
         out["markers"] = m
-        out["reached"] = bool(
-            m.get("has_pay_now") or m.get("has_continue_payment")
-            or out["providers"] or out["card_surface"]
-            or "payment" in str(out["url"]).lower() or "billing" in str(out["url"]).lower()
+        _url_l = str(out["url"]).lower()
+        _hard_surface = bool(
+            out["card_surface"]
+            or any(re.search(r"stripe|adyen|braintree|paypal|klarna|worldpay|opayo|mollie|cybersource", s, re.I)
+                   for s in (out.get("iframes") or []))
+            or m.get("has_pay_now")
         )
+        _url_surface = any(k in _url_l for k in ("/payment", "/billing", "/checkout/payment", "/basket/payment"))
+        out["reached"] = bool(_hard_surface or (_url_surface and m.get("has_continue_payment")))
+        out["provider_mentions_only"] = bool(out["providers"] and not _hard_surface and not _url_surface)
         merged_log["payment_stage"] = out
         self._record_meta_delta(merged_log, all_requests, page, "payment_stage")
         caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=20)
@@ -974,7 +986,7 @@ originalPermissionsQuery(parameters)
                 out["cookie_granted"] = bool(out["optanon_groups"] and ":1" in out["optanon_groups"])
             except Exception:
                 out["cookie_granted"] = False
-            out["verified"] = bool(st.get("any_granted")) or out["banner_dismissed"] or out["cookie_granted"]
+            out["verified"] = bool(out["granted"] and (st.get("any_granted") or out["banner_dismissed"] or out["cookie_granted"]))
             out["state"] = st
         except Exception as e:
             out["state_error"] = str(e)
@@ -1739,9 +1751,13 @@ originalPermissionsQuery(parameters)
         merged["fbq_events_observed"] = list(dict.fromkeys(
             merged.get("fbq_events_observed", []) + enriched.get("fbq_events_observed", [])
         ))
-        merged["fbq_events_with_event_id"] = (
-            merged.get("fbq_events_with_event_id", []) + enriched.get("fbq_events_with_event_id", [])
-        )
+        _seen_eid = {(x.get("event"), x.get("event_id"))
+                     for x in merged.get("fbq_events_with_event_id", [])}
+        for _x in enriched.get("fbq_events_with_event_id", []):
+            _k = (_x.get("event"), _x.get("event_id"))
+            if _k not in _seen_eid:
+                _seen_eid.add(_k)
+                merged.setdefault("fbq_events_with_event_id", []).append(_x)
         logger.info(f"[FUNNEL] Step '{step_label}': {len(captures)} fbq call(s), "
                     f"events={enriched.get('fbq_events_observed')}")
         return merged
@@ -1795,6 +1811,7 @@ originalPermissionsQuery(parameters)
                     .map(m => parseFloat(m[1]));
                 const sub = body.match(/subtotal\\s*[£$€]\\s?(\\d+(?:\\.\\d{2})?)/i);
                 const thr = body.match(/below\\s*[£$€]\\s?(\\d+(?:\\.\\d{2})?)/i)
+                   || body.match(/(?:on|over|above|orders? (?:of|over))[ ]*[£$€][ ]?([0-9]+(?:[.][0-9]{2})?)/i)
                     || body.match(/minimum (?:spend|order)[^£$€\\d]*[£$€]\\s?(\\d+(?:\\.\\d{2})?)/i);
                 const badge = document.querySelector(
                     "[data-cart-count], .cart-count, .js-cart-count, .basket-count, .minicart-quantity");
@@ -2883,6 +2900,8 @@ originalPermissionsQuery(parameters)
             logger.info(f"[FULFIL/{runner_name}] '{b['text']}' -> {new_url} "
                         f"moved={moved} in_flow={in_flow} payment={pay}")
             if moved and not in_flow:
+                merged_log.setdefault("observed_exits", []).append(
+                    {"from": before, "to": new_url, "ts": time.time()})
                 logger.warning(f"[FULFIL/{runner_name}] left checkout flow. Restoring {before}")
                 try:
                     page.goto(before, wait_until="domcontentloaded", timeout=30000)
@@ -3603,6 +3622,16 @@ originalPermissionsQuery(parameters)
             merged_log["detected_pixel_id"] = merged_log["detected_pixel_ids"][0]["pixel_id"]
             merged_log["pixel_id_source"] = merged_log["detected_pixel_ids"][0]["sources"][0]
         merged_log["per_pixel"] = self._attribute_events_per_pixel(merged_log)
+        _rank = {"network_tr": 5, "network_config_bundle": 4, "fbq_track_single": 3,
+                 "fbq_init": 2, "cdn_asset": 1, "tealium_static": 0}
+        _best_src, _best_pid = None, None
+        for _e in (merged_log.get("detected_pixel_ids") or []):
+            for _s in (_e.get("sources") or []):
+                if _best_src is None or _rank.get(_s, -1) > _rank.get(_best_src, -1):
+                    _best_src, _best_pid = _s, _e["pixel_id"]
+        if _best_src:
+            merged_log["pixel_id_source"] = _best_src
+            merged_log["detected_pixel_id"] = _best_pid
         merged_log["meta_fb_observations"] = meta_fb_summary
         merged_log["tracking_diagnostics"] = self._dump_tracking_diagnostics(page, all_requests)
         logger.warning(f"[FUNNEL/{runner_name}] META_FB_OBSERVATIONS: {json.dumps(meta_fb_summary, default=str)[:2000]}")
