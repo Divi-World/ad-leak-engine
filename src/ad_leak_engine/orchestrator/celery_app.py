@@ -30,10 +30,10 @@ app.conf.update(
     # Increased limits to accommodate heavy Playwright launches on Windows.
     # Direct Mode: ~60-120s typical. Niche Mode: Can take 5-10 mins per batch.
     
-    # Soft limit: Warns task at 300s (5 mins) - allows graceful logging
+    # Soft limit: Warns task at 1800s (30 mins) - allows graceful logging
     task_soft_time_limit=1800,
 
-    # Hard limit: Kills task at 360s (6 mins) - prevents infinite hang/zombies
+    # Hard limit: Kills task at 2100s (35 mins) - prevents infinite hang/zombies
     task_time_limit=2100,
 
     # --- TRACKING ---

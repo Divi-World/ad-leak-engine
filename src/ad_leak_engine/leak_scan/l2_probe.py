@@ -192,7 +192,8 @@ def detect_missing_add_to_cart(telemetry) -> bool:
     return not telemetry.get("has_add_to_cart", False)
 
 def detect_attribution_gap(page, telemetry) -> bool:
-    has_spend = page.total_estimated_spend[1] > 0 if page.total_estimated_spend else False
+    _spend = getattr(page, 'total_estimated_spend', None)
+    has_spend = _spend[1] > 0 if _spend else False
     has_conversions = telemetry.get("has_purchase_event", False)
     return has_spend and not has_conversions
 
@@ -986,8 +987,9 @@ originalPermissionsQuery(parameters)
                     continue
                 body = resp.text or ""
                 low = body.lower()
+                _fn = u.split(chr(63))[0].rsplit(chr(47),1)[-1]
                 if not any(k in low for k in ("fbq", "facebook", "pixel")):
-                    logger.info(f"[TEALIUM_SKIP] no meta keyword in {u.split(chr(47))[-1].split(chr(63))[0]} "
+                    logger.info(f"[TEALIUM_SKIP] no meta keyword in {_fn} "
                                 f"({len(body)} bytes)")
                     continue
                 cands = set(RE_FBQ_INIT.findall(body))
@@ -1002,7 +1004,9 @@ originalPermissionsQuery(parameters)
                     e = out.setdefault(pid, {"pixel_id": pid, "score": sc, "sources": []})
                     if u not in e["sources"]:
                         e["sources"].append(u)
-                    logger.info(f"[TEALIUM] pixel={pid} file={u.split('/')[-1].split('?')[0]}")
+                    logger.info(f"[TEALIUM] pixel={pid} file={_fn}")
+                    if not cands:
+                        logger.info(f"[TEALIUM_NOCAND] {_fn} passed keyword gate, no scored ID ({len(body)} bytes)")
             except Exception as e:
                 logger.warning(f"[TEALIUM_FAIL] {u[:110]}: {type(e).__name__}: {str(e)[:120]}")
         return sorted(out.values(), key=lambda x: -x["score"])
@@ -1611,6 +1615,7 @@ originalPermissionsQuery(parameters)
                     "pixel_fired": True, "requests": [], "capi_events": [],
                     "detected_pixel_id": pixel_id, "gtm_id": None,
                     "engine_used": "shopify_sandbox_static", "blocked_status": None,
+                    "pixel_evidence_grade": "static_only",
                     "has_event_data": False, "has_initiate_checkout": False,
                     "has_add_to_cart": False, "has_purchase_event": False,
                     "has_shared_event_id": False, "has_unhashed_pii": False,
@@ -3993,6 +3998,29 @@ originalPermissionsQuery(parameters)
     # Orchestrator
     # ------------------------------------------------------------------ #
     def probe(self, url: str, force_ecommerce: bool = False) -> dict:
+        """Public entry: run the swarm, then apply probe-level leak verdicts."""
+        out = self._probe_swarm(url, force_ecommerce=force_ecommerce)
+        try:
+            if (isinstance(out, dict)
+                    and (out.get("has_event_data") or out.get("detected_pixel_id"))
+                    and not out.get("blocked_status")):
+                _v = []
+                if detect_missing_add_to_cart(out):
+                    _v.append({"signal": "browser_add_to_cart_missing", "severity": 0.70})
+                if detect_missing_initiate_checkout(out):
+                    _v.append({"signal": "browser_initiate_checkout_missing", "severity": 0.70})
+                if detect_capi_dedup_failure(out):
+                    _v.append({"signal": "capi_browser_dedup_gap", "severity": 0.75})
+                if detect_attribution_gap(None, out):
+                    _v.append({"signal": "spend_without_conversion_signal", "severity": 0.80})
+                out["probe_verdicts"] = _v
+                out["per_pixel_verdicts"] = pf.per_pixel_verdicts(out.get("pixel_census") or {})
+                logger.info(f"[PROBE_VERDICTS] {json.dumps(_v)}")
+        except Exception as e:
+            logger.debug(f"[PROBE_VERDICTS] skipped: {e}")
+        return out
+
+    def _probe_swarm(self, url: str, force_ecommerce: bool = False) -> dict:
         """Main Entry Point: Hybrid Stealth Swarm."""
         domain_lower = urlparse(url).netloc.lower()
         enterprise_domains = ["amazon.", "alibaba.", "walmart.", "target.", "ebay.", "etsy.com", "tiktok.com", "facebook.com", "instagram.com", "youtube.com", "ulta.com", "reitmans.com"]
@@ -4003,6 +4031,7 @@ originalPermissionsQuery(parameters)
                 "has_add_to_cart": True, "has_shared_event_id": True,
                 "has_purchase_event": True, "is_checkout_page": False,
                 "is_enterprise": True, "engine_used": "exempt",
+                "pixel_evidence_grade": "exempt_unmeasured",
                 "has_event_data": True, "fbq_events_observed": [],
             }
         final_log = {
@@ -4045,6 +4074,7 @@ originalPermissionsQuery(parameters)
                             final_log["pixel_fired"] = True
                             final_log["gtm_id"] = gtm_id
                             final_log["engine_used"] = "gtm_static_resolver"
+                            final_log["pixel_evidence_grade"] = "static_only"
                             logger.info(f"[SWARM] SUCCESS via GTM Static Resolver! Pixel: {best_pid}")
                             final_log["pixel_validation"] = self._validate_pixel_via_config(best_pid)
                             final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
@@ -4129,6 +4159,7 @@ originalPermissionsQuery(parameters)
                     final_log["detected_pixel_id"] = best_pid
                     final_log["pixel_id_source"] = "universal_asset_scan"
                     final_log["engine_used"] = "universal_asset_scan"
+                    final_log["pixel_evidence_grade"] = "static_only"
                     final_log["asset_scan_score"] = best_score
                     final_log["pixel_validation"] = self._validate_pixel_via_config(best_pid)
                     final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
@@ -4145,6 +4176,7 @@ originalPermissionsQuery(parameters)
             final_log["detected_pixel_id"] = extraction_result["detected_pixel_id"]
             final_log["pixel_fired"] = True
             final_log["engine_used"] = extraction_result["engine_used"]
+            final_log["pixel_evidence_grade"] = "static_only"
             logger.info(f"[SWARM] SUCCESS via Universal Extractor! Pixel: {extraction_result['detected_pixel_id']}")
             final_log["pixel_validation"] = self._validate_pixel_via_config(extraction_result["detected_pixel_id"])
             final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)

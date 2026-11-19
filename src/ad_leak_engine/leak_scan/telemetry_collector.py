@@ -70,6 +70,19 @@ class TelemetryCollector:
                     telemetry.update(self.pricing.measure(url))
                     return {"network_log": network_log, "telemetry": telemetry}
 
+                # A clean run that found no pixel is a RESULT, not a failure.
+                # Re-running the whole swarm doubles runtime for no new evidence.
+                if not waf_blocked and isinstance(network_log, dict) and req_count > 0:
+                    logger.info(f"Primary Probe measured {url} with no pixel; "
+                                f"returning evidence, no swarm re-run.")
+                    telemetry = self.perf.measure(url)
+                    telemetry.update(self.mobile_ux.measure(url))
+                    telemetry.update(self.cart.measure(url))
+                    telemetry.update(self.api.measure(url))
+                    telemetry.update(self.saas.measure(url))
+                    telemetry.update(self.pricing.measure(url))
+                    return {"network_log": network_log, "telemetry": telemetry}
+
                 # If blocked or empty, log and proceed to fallback
                 if waf_blocked:
                     logger.warning(f"Primary Probe Blocked for {url}. Engaging Fallback.")

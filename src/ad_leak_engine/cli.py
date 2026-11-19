@@ -347,12 +347,27 @@ def main():
     p_fb.add_argument("--positive", action="store_true", default=True)
 
     sub.add_parser("test")
+    p_probe = sub.add_parser("probe")
+    p_probe.add_argument("url")
+    p_probe.add_argument("--force-ecommerce", action="store_true", default=True)
+    p_probe.add_argument("--out", default="")
     
     args = parser.parse_args()
     if args.command == "scan":
         cmd_scan(args.keyword, args.country, args.limit, args.skip_crawl)
     elif args.command == "feedback":
         cmd_feedback(args.page_id, args.reply_text, args.positive)
+    elif args.command == "probe":
+        from .leak_scan.l2_probe import L2LiveProbe
+        import json as _json
+        _res = L2LiveProbe().probe(args.url, force_ecommerce=args.force_ecommerce)
+        _txt = _json.dumps(_res, indent=2, default=str)
+        if args.out:
+            from pathlib import Path as _P
+            _P(args.out).write_text(_txt, encoding="utf-8")
+            print(f"[ALE] probe evidence written to {args.out}")
+        else:
+            print(_txt)
     elif args.command == "test":
         cmd_test()
     else:
