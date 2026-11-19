@@ -160,6 +160,7 @@ class L2TrackingScanner(AbstractLeakScanner):
         _probe_boundary = (net_log.get("boundary_evidence") or raw.get("boundary_evidence") or [])
         _probe_consent = (net_log.get("consent_at_gate") or raw.get("consent_at_gate") or {})
         _probe_blocked_requests = (net_log.get("blocked_requests") or raw.get("blocked_requests") or [])
+        _probe_census = (net_log.get("pixel_census") or raw.get("pixel_census") or {})
 
         # [FIX-2399] Surface the probe's Meta-side validation and tracking-mode
         # inference. Both are produced by probe()/probe_funnel() and are None-safe.
@@ -241,6 +242,7 @@ class L2TrackingScanner(AbstractLeakScanner):
                         "boundary_evidence": _probe_boundary,
                         "consent_at_gate": _probe_consent,
                         "blocked_requests": _probe_blocked_requests,
+                        "pixel_census": _probe_census,
                         "pixel_validation": _probe_pixel_validation,          # [FIX-2399]
                         "tracking_mode_inferred": _probe_tracking_mode,       # [FIX-2399]
                         "observed_events": _probe_fbq_events,                 # [FIX-2399]
@@ -275,6 +277,7 @@ class L2TrackingScanner(AbstractLeakScanner):
                     "boundary_evidence": _probe_boundary,
                     "consent_at_gate": _probe_consent,
                     "blocked_requests": _probe_blocked_requests,
+                    "pixel_census": _probe_census,
                     "pixel_validation": _probe_pixel_validation,          # [FIX-2399]
                     "tracking_mode_inferred": _probe_tracking_mode,       # [FIX-2399]
                     "observed_events": _probe_fbq_events,                 # [FIX-2399]
@@ -310,6 +313,7 @@ class L2TrackingScanner(AbstractLeakScanner):
                         "boundary_evidence": _probe_boundary,
                         "consent_at_gate": _probe_consent,
                         "blocked_requests": _probe_blocked_requests,
+                        "pixel_census": _probe_census,
                         "pixel_validation": _probe_pixel_validation,          # [FIX-2399]
                         "tracking_mode_inferred": _probe_tracking_mode,       # [FIX-2399]
                         "observed_events": _probe_fbq_events,                 # [FIX-2399]
@@ -338,6 +342,7 @@ class L2TrackingScanner(AbstractLeakScanner):
                         "boundary_evidence": _probe_boundary,
                         "consent_at_gate": _probe_consent,
                         "blocked_requests": _probe_blocked_requests,
+                        "pixel_census": _probe_census,
                         "pixel_validation": _probe_pixel_validation,          # [FIX-2399]
                         "tracking_mode_inferred": _probe_tracking_mode,       # [FIX-2399]
                         "observed_events": _probe_fbq_events,                 # [FIX-2399]
@@ -369,6 +374,7 @@ class L2TrackingScanner(AbstractLeakScanner):
                     "boundary_evidence": _probe_boundary,
                     "consent_at_gate": _probe_consent,
                     "blocked_requests": _probe_blocked_requests,
+                    "pixel_census": _probe_census,
                     "pixel_validation": _probe_pixel_validation,              # [FIX-2399]
                     "tracking_mode_inferred": _probe_tracking_mode,           # [FIX-2399]
                     "observed_events": _probe_fbq_events,                     # [FIX-2399]
@@ -402,6 +408,7 @@ class L2TrackingScanner(AbstractLeakScanner):
                     "boundary_evidence": _probe_boundary,
                     "consent_at_gate": _probe_consent,
                     "blocked_requests": _probe_blocked_requests,
+                    "pixel_census": _probe_census,
                     "pixel_label": "Primary Conversion Pixel", # NEW CONTEXT
                     "pixel_validation": _probe_pixel_validation,              # [FIX-2399]
                     "tracking_mode_inferred": _probe_tracking_mode,           # [FIX-2399]
@@ -433,6 +440,7 @@ class L2TrackingScanner(AbstractLeakScanner):
                     "boundary_evidence": _probe_boundary,
                     "consent_at_gate": _probe_consent,
                     "blocked_requests": _probe_blocked_requests,
+                    "pixel_census": _probe_census,
                     "pixel_label": "Server-Side Only Pixel",
                     "pixel_validation": _probe_pixel_validation,              # [FIX-2399]
                     "tracking_mode_inferred": _probe_tracking_mode,           # [FIX-2399]
@@ -503,6 +511,7 @@ class L2TrackingScanner(AbstractLeakScanner):
                             "boundary_evidence": _probe_boundary,
                             "consent_at_gate": _probe_consent,
                             "blocked_requests": _probe_blocked_requests,
+                            "pixel_census": _probe_census,
                             "pixel_validation": _probe_pixel_validation,          # [FIX-2399]
                             "tracking_mode_inferred": _probe_tracking_mode,       # [FIX-2399]
                             "probe_observed_events": _probe_fbq_events,           # [FIX-2399]
@@ -514,7 +523,9 @@ class L2TrackingScanner(AbstractLeakScanner):
 
 
 def detect_capi_dedup_failure(telemetry) -> bool:
-    # Check if browser and server events lack shared event_id
+    # A dedup failure is only meaningful when BOTH sides exist.
+    if not telemetry.get("capi_events"):
+        return False
     return not telemetry.get("has_shared_event_id", True)
 
 def detect_missing_initiate_checkout(telemetry) -> bool:

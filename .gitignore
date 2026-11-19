@@ -76,3 +76,6 @@ __pycache__/
 _funnel_test.py
 _repair2.py
 evidence/
+_*.py
+Reports/
+Ad-Leak-Readme.md.md

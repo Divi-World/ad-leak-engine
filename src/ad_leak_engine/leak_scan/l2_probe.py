@@ -3869,9 +3869,13 @@ originalPermissionsQuery(parameters)
             pid = result["detected_pixel_id"]
             logger.info(f"[FUNNEL] Validating pixel {pid} against Meta config...")
             _val_by_id = {}
+            for _v in (result.get("pixel_validations") or []):
+                if isinstance(_v, dict) and _v.get("id"):
+                    _val_by_id[str(_v["id"])] = _v
             _ids = [pid] + [e["pixel_id"] for e in (result.get("detected_pixel_ids") or [])]
             for _p in dict.fromkeys(_ids):
-                _val_by_id[_p] = self._validate_pixel_via_config(_p)
+                if _p not in _val_by_id:
+                    _val_by_id[_p] = self._validate_pixel_via_config(_p)
             result["pixel_validation"] = _val_by_id.get(pid)
             result["pixel_validations"] = list(_val_by_id.values())
             result["pixel_evidence_grade"] = (
