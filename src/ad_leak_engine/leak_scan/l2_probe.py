@@ -686,6 +686,76 @@ originalPermissionsQuery(parameters)
         merged_log["operator_session"] = out
         return out
 
+    def _recon_auth_exit(self, page, merged_log: dict, all_requests: list,
+                         runner_name: str) -> dict:
+        """Visit the observed auth exit ONCE and inventory it. Either find a
+        guest path the merchant offers, or record a definitive evidenced wall.
+        Never invents credentials. Never submits payment."""
+        out = {"attempted": False, "url": None, "guest_found": False,
+               "controls": [], "verdict": None}
+        target = None
+        for _ex in reversed(merged_log.get("observed_exits") or []):
+            _u = str(_ex.get("to") or "")
+            if any(k in _u.lower() for k in ("/login", "/signin", "/sign-in",
+                                            "login_challenge", "/oauth", "/sso")):
+                target = _u
+                break
+        if not target:
+            out["verdict"] = "no_auth_exit_observed"
+            return out
+        origin = page.url
+        out["attempted"], out["url"] = True, target
+        try:
+            page.goto(target, wait_until="domcontentloaded", timeout=30000)
+            time.sleep(3)
+        except Exception as e:
+            out["verdict"] = "auth_page_unreachable"
+            out["error"] = str(e)[:160]
+            return out
+        self._record_meta_delta(merged_log, all_requests, page, "auth_page")
+        caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=12)
+        self._merge_funnel_captures(merged_log, caps, "auth_page")
+        snap = self._snapshot_gate(page)
+        btns = snap.get("buttons") or []
+        out["controls"] = [x.get("text") for x in btns][:25]
+        out["markers"] = snap.get("markers", {})
+        grx = re.compile(r"guest|without an account|no account|skip (sign|log)", re.I)
+        cands = [x for x in btns if not x.get("disabled")
+                 and grx.search(str(x.get("text") or ""))]
+        merged_log.setdefault("auth_page_evidence", []).append(
+            {"url": target, "controls": out["controls"], "markers": out["markers"]})
+        logger.info(f"[AUTH_RECON/{runner_name}] {target[:110]} "
+                    f"controls={json.dumps(out['controls'])[:500]}")
+        flow = ("checkout", "/basket", "/bag", "/cart", "/trolley", "/payment", "demandware")
+        for c in cands[:2]:
+            try:
+                loc = page.locator('button, a[role="button"], [role="button"], input[type="submit"]').nth(c["idx"])
+                try:
+                    with page.expect_navigation(timeout=12000):
+                        loc.evaluate("(el) => el.click()")
+                except Exception:
+                    loc.evaluate("(el) => el.click()")
+                    time.sleep(4)
+            except Exception as e:
+                logger.debug(f"[AUTH_RECON/{runner_name}] guest click failed: {e}")
+                continue
+            after = self._snapshot_gate(page)
+            nu = str(after.get("url") or "")
+            ok = any(m in nu.lower() for m in flow)
+            merged_log.setdefault("guest_attempts", []).append(
+                {"control": c.get("text"), "url_after": nu, "stayed_in_flow": ok})
+            logger.info(f"[AUTH_RECON/{runner_name}] guest -> {nu} in_flow={ok}")
+            if ok:
+                out["guest_found"], out["verdict"] = True, "guest_path_available"
+                return out
+        out["verdict"] = "auth_required_no_guest_path"
+        try:
+            page.goto(origin, wait_until="domcontentloaded", timeout=30000)
+            time.sleep(2)
+        except Exception:
+            pass
+        return out
+
     def _classify_checkout_blocker(self, page, merged_log: dict, runner_name: str) -> dict:
         """Evidence-driven blocker classification. Multi-platform, no hardcoding."""
         snap = self._snapshot_gate(page)
@@ -904,15 +974,21 @@ originalPermissionsQuery(parameters)
             return []
         logger.info(f"[TEALIUM] {len(urls)} tag file(s) discovered from live traffic")
         out = {}
-        for u in urls[:12]:
+        _prio = sorted(urls, key=lambda x: (0 if re.search(r"utag\.\d+\.js", x) else 1, x))
+        logger.info(f"[TEALIUM_ORDER] {len(_prio)} unique file(s); "
+                    f"fetching {min(len(_prio), 24)} (numbered tag configs first)")
+        for u in _prio[:24]:
             try:
                 resp = cffi_requests.get(u, impersonate="chrome120", timeout=8,
                                          headers={"Referer": referer_url})
                 if resp.status_code != 200:
+                    logger.warning(f"[TEALIUM_HTTP] {resp.status_code} {u[:110]}")
                     continue
                 body = resp.text or ""
                 low = body.lower()
                 if not any(k in low for k in ("fbq", "facebook", "pixel")):
+                    logger.info(f"[TEALIUM_SKIP] no meta keyword in {u.split(chr(47))[-1].split(chr(63))[0]} "
+                                f"({len(body)} bytes)")
                     continue
                 cands = set(RE_FBQ_INIT.findall(body))
                 for m in re.finditer(r"\b(\d{15,16})\b", body):
@@ -928,7 +1004,7 @@ originalPermissionsQuery(parameters)
                         e["sources"].append(u)
                     logger.info(f"[TEALIUM] pixel={pid} file={u.split('/')[-1].split('?')[0]}")
             except Exception as e:
-                logger.debug(f"[TEALIUM] fetch failed {u[:80]}: {e}")
+                logger.warning(f"[TEALIUM_FAIL] {u[:110]}: {type(e).__name__}: {str(e)[:120]}")
         return sorted(out.values(), key=lambda x: -x["score"])
 
     def _handle_consent(self, page, merged_log: dict, runner_name: str) -> dict:
@@ -3049,6 +3125,13 @@ originalPermissionsQuery(parameters)
                     out["payment_reached"] = self._continue_to_payment(page, merged_log, runner_name)
                     self._record_meta_delta(merged_log, all_requests, page, "after_guest_continue")
             out["blocker"] = _bl.get("kind")
+            if _bl.get("kind") in ("auth_wall", "auth_wall_with_guest"):
+                merged_log["guest_recon"] = self._recon_auth_exit(
+                    page, merged_log, all_requests, runner_name)
+                if merged_log["guest_recon"].get("guest_found"):
+                    out["guest_checkout"] = True
+                    out["payment_reached"] = self._continue_to_payment(page, merged_log, runner_name)
+                    self._record_meta_delta(merged_log, all_requests, page, "after_guest_continue")
         _pay = self._capture_payment_stage(page, merged_log, all_requests, runner_name)
         out["payment_stage_reached"] = bool(_pay.get("reached"))
         if _pay.get("reached"):
@@ -3714,6 +3797,19 @@ originalPermissionsQuery(parameters)
         if _cen.get("primary_pixel_id") and not merged_log.get("detected_pixel_id"):
             merged_log["detected_pixel_id"] = _cen["primary_pixel_id"]
         merged_log["pixel_validations"] = _cen.get("all_validations") or merged_log.get("pixel_validations")
+        merged_log["worker_harvest"] = pf.harvest_workers(page)
+        if merged_log["worker_harvest"]:
+            logger.info(f"[WORKER_HARVEST] {json.dumps(merged_log['worker_harvest'], default=str)[:800]}")
+        merged_log["frame_harvest"] = pf.harvest_frames(
+            page, id(page) in getattr(self, "_mw_page_ids", set()))
+        for _fr in merged_log["frame_harvest"]:
+            for _pid in (_fr.get("pixel_ids") or []):
+                if not any(e["pixel_id"] == _pid
+                           for e in merged_log.get("detected_pixel_ids", [])):
+                    merged_log.setdefault("detected_pixel_ids", []).append(
+                        {"pixel_id": _pid, "sources": ["subframe"], "hits": 1})
+        if merged_log["frame_harvest"]:
+            logger.info(f"[FRAME_HARVEST] {json.dumps(merged_log['frame_harvest'], default=str)[:1200]}")
         merged_log["meta_fb_observations"] = meta_fb_summary
         merged_log["tracking_diagnostics"] = self._dump_tracking_diagnostics(page, all_requests)
         logger.warning(f"[FUNNEL/{runner_name}] META_FB_OBSERVATIONS: {json.dumps(meta_fb_summary, default=str)[:2000]}")
@@ -4102,6 +4198,9 @@ originalPermissionsQuery(parameters)
                         "fbq_raw_calls",
                         "fbq_call_types",
                         "tracking_diagnostics",
+                        "frame_harvest",
+                        "guest_recon",
+                        "worker_harvest",
                         "pixel_census",
                         "per_pixel",
                         "pixel_evidence_grade",

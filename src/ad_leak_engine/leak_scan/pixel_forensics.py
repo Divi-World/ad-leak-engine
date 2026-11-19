@@ -166,3 +166,102 @@ def build_census(merged_log, validate=None):
         "primary_pixel_id": rows[0]["pixel_id"] if rows else None,
         "all_validations": list(vals.values()),
     }
+
+
+def harvest_frames(page, mw_enabled=False):
+    """Pixels can initialise inside subframes. Harvest every frame, not just top.
+
+    Measured: frame.evaluate accepts the 'mw:' prefix, and cross-origin frames
+    respond rather than throwing. Failures are recorded per frame, never fatal.
+    """
+    out = []
+    js = ("() => { try { return {"
+          " captured: (window.__fbq_captured || []).length,"
+          " pixels: (typeof fbq === 'function' && fbq.instance && fbq.instance.pixelsByID)"
+          " ? Object.keys(fbq.instance.pixelsByID) : [],"
+          " queue: (typeof fbq === 'function' && fbq.queue)"
+          " ? fbq.queue.filter(a => a && a[0] === 'init' && a[1]).map(a => String(a[1])) : []"
+          " }; } catch (e) { return {error: String(e)}; } }")
+    try:
+        frames = list(page.frames)
+    except Exception:
+        return out
+    for fr in frames:
+        rec = {"url": "", "captured": 0, "pixel_ids": []}
+        try:
+            rec["url"] = (fr.url or "")[:200]
+        except Exception:
+            pass
+        try:
+            st = fr.evaluate(("mw:" + js) if mw_enabled else js) or {}
+            ids = set(st.get("pixels") or []) | set(st.get("queue") or [])
+            rec["captured"] = st.get("captured", 0)
+            rec["pixel_ids"] = sorted(ids)
+            if st.get("error"):
+                rec["error"] = str(st["error"])[:120]
+        except Exception as e:
+            rec["error"] = str(e)[:120]
+        out.append(rec)
+    return out
+
+
+def harvest_workers(page):
+    """Service/dedicated workers can carry pixel traffic outside the page realm.
+    Measured: context.service_workers and page.workers both exist in this build.
+    Enumeration only — never fatal, never blocks the funnel.
+    """
+    out = []
+    try:
+        ctx = page.context
+    except Exception:
+        ctx = None
+    for label, getter in (("service_worker", lambda: list(ctx.service_workers)),
+                          ("worker", lambda: list(page.workers))):
+        try:
+            for w in getter():
+                rec = {"kind": label, "url": ""}
+                try:
+                    rec["url"] = (w.url or "")[:200]
+                except Exception:
+                    pass
+                out.append(rec)
+        except Exception as e:
+            out.append({"kind": label, "error": str(e)[:120]})
+    return out
+
+
+def per_pixel_verdicts(census):
+    """Per-pixel leak verdicts. A site with two pixels can leak on one only.
+    Consumes the census already carried in every evidence branch.
+    Returns a list; never raises on missing/empty input.
+    """
+    out = []
+    if not isinstance(census, dict):
+        return out
+    for r in (census.get("pixels") or []):
+        if not isinstance(r, dict):
+            continue
+        pid = str(r.get("pixel_id") or "")
+        if not pid:
+            continue
+        gaps = []
+        if not r.get("has_add_to_cart"):
+            gaps.append("AddToCart")
+        if not r.get("has_initiate_checkout"):
+            gaps.append("InitiateCheckout")
+        if not r.get("has_purchase_event"):
+            gaps.append("Purchase")
+        transmission = r.get("transmission") or "unknown"
+        out.append({
+            "pixel_id": pid,
+            "verdict": r.get("verdict"),
+            "transmission": transmission,
+            "config_bytes": r.get("config_bytes"),
+            "events": list(r.get("events") or []),
+            "event_id_count": len(r.get("event_ids") or []),
+            "missing_events": gaps,
+            "has_unhashed_pii": bool(r.get("has_unhashed_pii")),
+            "dormant": transmission == "static_only",
+            "sources": list(r.get("sources") or []),
+        })
+    return out

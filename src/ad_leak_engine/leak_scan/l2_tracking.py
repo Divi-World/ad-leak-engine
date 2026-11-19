@@ -519,6 +519,62 @@ class L2TrackingScanner(AbstractLeakScanner):
                         }
                     ))
 
+
+        # [DETECTOR_WIRING_2399] The four leak detectors were defined but
+        # never invoked. Wired here, gated on real measurement so a blocked
+        # or empty run can never fabricate a gap.
+        from .pixel_forensics import per_pixel_verdicts as _ppv
+        _tl = net_log if isinstance(net_log, dict) else {}
+        _census = _tl.get('pixel_census') or {}
+        _verdicts = _ppv(_census)
+        _measured = bool(_tl.get('has_event_data')) or bool(_tl.get('detected_pixel_id'))
+        if _measured and not (fetch_blocked or waf_blocked):
+            _have = set()
+            for _l in leaks:
+                _have.add(getattr(_l, 'signal', None))
+            _base = {
+                'detected_pixel_id': primary_pixel_id,
+                'detected_pixel_ids': _probe_pixel_set,
+                'pixel_census': _census,
+                'per_pixel': _probe_per_pixel,
+                'per_pixel_verdicts': _verdicts,
+                'pixel_evidence_grade': _probe_evidence_grade,
+                'observed_events': _probe_fbq_events,
+                'tracking_architecture': tracking_architecture,
+                'measurement_gate': 'verified',
+            }
+            _checks = [
+                ('browser_add_to_cart_missing', detect_missing_add_to_cart(_tl), 0.70,
+                 'AddToCart was not observed on this funnel. Fire fbq AddToCart with value and currency on every add.'),
+                ('browser_initiate_checkout_missing', detect_missing_initiate_checkout(_tl), 0.70,
+                 'InitiateCheckout was not observed. Fire it when the checkout flow is entered.'),
+                ('capi_browser_dedup_gap', detect_capi_dedup_failure(_tl), 0.75,
+                 'Browser and server events do not share an event_id, so Meta cannot deduplicate them.'),
+                ('spend_without_conversion_signal', detect_attribution_gap(page, _tl), 0.80,
+                 'Ad spend is visible but no Purchase signal was measured. Conversion attribution is broken.'),
+            ]
+            for _sig, _fired, _sev, _rec in _checks:
+                if _fired and _sig not in _have:
+                    leaks.append(Leak(
+                        page_id=page.id,
+                        tier='L2',
+                        signal=_sig,
+                        severity=_sev,
+                        recommendation=_rec,
+                        evidence=dict(_base),
+                    ))
+                    _have.add(_sig)
+            _dormant = [v['pixel_id'] for v in _verdicts if v.get('dormant')]
+            if _dormant and 'pixel_provisioned_but_dormant' not in _have:
+                leaks.append(Leak(
+                    page_id=page.id,
+                    tier='L2',
+                    signal='pixel_provisioned_but_dormant',
+                    severity=0.65,
+                    recommendation='These pixel IDs are provisioned in Meta but transmitted no events during the audit. Verify they are deployed and unblocked by consent.',
+                    evidence=dict(_base, dormant_pixel_ids=_dormant),
+                ))
+
         return leaks
 
 
