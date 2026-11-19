@@ -79,3 +79,7 @@ evidence/
 _*.py
 Reports/
 Ad-Leak-Readme.md.md
+ale_audit_*/
+Reports
+Remain.txt
+output/
