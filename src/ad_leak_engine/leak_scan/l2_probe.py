@@ -3709,14 +3709,11 @@ originalPermissionsQuery(parameters)
         merged_log["first_party_meta_hits"] = _fp_hits
         if _fp_hits:
             logger.info(f"[FIRST_PARTY_META] {json.dumps(_fp_hits)[:900]}")
-<<<<<<< HEAD
-=======
         merged_log["pixel_census"] = self._pixel_census(merged_log)
         _cen = merged_log["pixel_census"]
         if _cen.get("primary_pixel_id") and not merged_log.get("detected_pixel_id"):
             merged_log["detected_pixel_id"] = _cen["primary_pixel_id"]
         merged_log["pixel_validations"] = _cen.get("all_validations") or merged_log.get("pixel_validations")
->>>>>>> e3f6cac (L2: Camoufox main-realm parity, first-party Meta signatures, engine logger, dedup guard)
         merged_log["meta_fb_observations"] = meta_fb_summary
         merged_log["tracking_diagnostics"] = self._dump_tracking_diagnostics(page, all_requests)
         logger.warning(f"[FUNNEL/{runner_name}] META_FB_OBSERVATIONS: {json.dumps(meta_fb_summary, default=str)[:2000]}")
