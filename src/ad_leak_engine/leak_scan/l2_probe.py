@@ -73,6 +73,8 @@ except ImportError:
 RE_FBQ_INIT = re.compile(r"""fbq\s*\(\s*['"]init['"]\s*,\s*['"](\d{8,})['"]""")
 RE_PIXEL_JSON = re.compile(r'"pixelId"\s*:\s*"(\d{8,})"')
 RE_GTM_ID = re.compile(r'GTM-[A-Z0-9]{4,}')
+# gtag.js carries GA4 (G-) and Google Ads (AW-) IDs, not a GTM container.
+RE_GTAG_ID = re.compile(r'[?&]id=((?:G|AW|GT|DC)-[A-Z0-9-]{4,})', re.IGNORECASE)
 RE_CAPI_URL = re.compile(r'graph\.facebook\.com/v\d+\.\d+/(\d+)/events')
 RE_CONFIG_BUNDLE = re.compile(r'connect\.facebook\.net/signals/config/(\d{8,})')
 RE_TR_PIXEL_ID = re.compile(r'[?&]id=(\d{8,})')
@@ -1005,8 +1007,10 @@ originalPermissionsQuery(parameters)
                     if u not in e["sources"]:
                         e["sources"].append(u)
                     logger.info(f"[TEALIUM] pixel={pid} file={_fn}")
-                    if not cands:
-                        logger.info(f"[TEALIUM_NOCAND] {_fn} passed keyword gate, no scored ID ({len(body)} bytes)")
+                if not cands:
+                    logger.info(f"[TEALIUM_NOCAND] {_fn} keyword gate passed, no candidate ID ({len(body)} bytes)")
+                elif not any(self._score_pixel_probability(p, "TEALIUM_TAG") > 0.5 for p in cands):
+                    logger.info(f"[TEALIUM_REJECTED] {_fn} {len(cands)} candidate(s) below score threshold ({len(body)} bytes)")
             except Exception as e:
                 logger.warning(f"[TEALIUM_FAIL] {u[:110]}: {type(e).__name__}: {str(e)[:120]}")
         return sorted(out.values(), key=lambda x: -x["score"])
@@ -3815,6 +3819,16 @@ originalPermissionsQuery(parameters)
                         {"pixel_id": _pid, "sources": ["subframe"], "hits": 1})
         if merged_log["frame_harvest"]:
             logger.info(f"[FRAME_HARVEST] {json.dumps(merged_log['frame_harvest'], default=str)[:1200]}")
+        _gtag = []
+        for _r in all_requests:
+            if not isinstance(_r, dict):
+                continue
+            for _g in RE_GTAG_ID.findall(str(_r.get("url", ""))):
+                if _g not in _gtag:
+                    _gtag.append(_g)
+        merged_log["gtag_ids"] = _gtag
+        if _gtag:
+            logger.info(f"[GTAG_IDS] {json.dumps(_gtag)}")
         merged_log["meta_fb_observations"] = meta_fb_summary
         merged_log["tracking_diagnostics"] = self._dump_tracking_diagnostics(page, all_requests)
         logger.warning(f"[FUNNEL/{runner_name}] META_FB_OBSERVATIONS: {json.dumps(meta_fb_summary, default=str)[:2000]}")
@@ -4230,6 +4244,7 @@ originalPermissionsQuery(parameters)
                         "fbq_raw_calls",
                         "fbq_call_types",
                         "tracking_diagnostics",
+                        "gtag_ids",
                         "frame_harvest",
                         "guest_recon",
                         "worker_harvest",

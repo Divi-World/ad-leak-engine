@@ -17,18 +17,22 @@ class ScanBody(BaseModel):
 
 
 @router.post("/scan")
-def scan(body: ScanBody):
+def scan(body: ScanBody | None = None,
+         keyword: str = "", country: str = "US", limit: int = 10,
+         direct_url: str | None = None, page_id: str | None = None):
     """[SEED:2399] Real dispatch. Previously returned a fake 'dispatched'."""
+    b = body or ScanBody(keyword=keyword, country=country, limit=limit,
+                         direct_url=direct_url, page_id=page_id)
     job_id = str(uuid.uuid4())
     os.makedirs(f"output/{job_id}", exist_ok=True)
     with open(f"output/{job_id}/status.json", "w", encoding="utf-8") as f:
         json.dump({"status": "pending", "progress": 0, "job_id": job_id}, f)
     task = run_scan_pipeline_task.delay(
-        job_id, body.keyword, body.country, body.limit, body.direct_url, body.page_id
+        job_id, b.keyword, b.country, b.limit, b.direct_url, b.page_id
     )
     with open(f"output/{job_id}/status.json", "w", encoding="utf-8") as f:
         json.dump({"status": "queued", "progress": 5, "job_id": job_id,
                    "celery_task_id": str(getattr(task, "id", ""))}, f)
     return {"status": "accepted", "job_id": job_id,
             "celery_task_id": str(getattr(task, "id", "")),
-            "mode": "direct" if (body.direct_url or body.page_id) else "niche"}
+            "mode": "direct" if (b.direct_url or b.page_id) else "niche"}
