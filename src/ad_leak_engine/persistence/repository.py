@@ -5,7 +5,7 @@ from sqlmodel import Session
 
 from ..shared.schemas import RawAd
 from .db import engine
-from .models import AdRecord
+from .models import AdRecord, Tenant
 
 
 class AdRepository:
