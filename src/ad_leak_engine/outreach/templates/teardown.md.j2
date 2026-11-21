@@ -56,3 +56,131 @@ Based on industry average CPA benchmarks for this niche, fixing these leaks prev
 {% endfor %}
 {% endfor %}
 
+
+{% if audit and audit.pixel_census %}
+---
+
+## Tracking Infrastructure Census (Measured)
+
+Every pixel identifier discovered during this audit, graded on evidence — not on assumption.
+
+- **Total identifiers found:** {{ audit.pixel_census.total_ids }}
+- **Confirmed provisioned in Meta:** {{ audit.pixel_census.confirmed_real }}
+- **Transmitting events:** {{ audit.pixel_census.transmitting }}
+- **Provisioned but dormant:** {{ audit.pixel_census.static_only }}
+- **Dead / invalid:** {{ audit.pixel_census.dead_or_invalid }}
+- **Evidence grade:** {{ audit.pixel_evidence_grade or 'n/a' }}
+
+| Pixel ID | Meta Verdict | Transmission | Events Observed | Missing Funnel Events |
+|---|---|---|---|---|
+{% for p in audit.pixel_census.pixels %}| {{ p.pixel_id }} | {{ p.verdict }} | {{ p.transmission }} | {{ p.events | join(', ') or 'none' }} | {% if audit.per_pixel_verdicts %}{% for v in audit.per_pixel_verdicts if v.pixel_id == p.pixel_id %}{{ v.missing_events | join(', ') or 'none' }}{% endfor %}{% else %}n/a{% endif %} |
+{% endfor %}
+{% if audit.per_pixel_verdicts %}
+{% for v in audit.per_pixel_verdicts if v.dormant %}
+> **Dormant pixel {{ v.pixel_id }}** — provisioned in Meta ({{ v.config_bytes }} byte config) but transmitted **zero** events during this audit. This is spend running without measurement.
+{% endfor %}
+{% endif %}
+{% endif %}
+
+{% if audit and audit.gtag_ids %}
+### Google Tagging Identifiers (Measured)
+{% for g in audit.gtag_ids %}- `{{ g }}`
+{% endfor %}
+{% endif %}
+
+{% if audit and audit.fulfilment_result %}
+---
+
+## Checkout Funnel Progression (Measured)
+
+- **Items verified in basket:** {{ audit.items_added_verified or 0 }}
+- **Fulfilment attempted:** {{ audit.fulfilment_result.attempted }}
+- **Delivery option selected:** {{ audit.fulfilment_result.delivery }}
+- **Postcode accepted:** {{ audit.fulfilment_result.postcode }}
+- **Guest checkout path found:** {{ audit.fulfilment_result.guest_checkout or False }}
+- **Payment stage reached:** {{ audit.fulfilment_result.payment_stage_reached or False }}
+{% if audit.fulfilment_result.blocker %}- **Blocker:** {{ audit.fulfilment_result.blocker }}{% endif %}
+
+{% if audit.consent_at_gate and audit.consent_at_gate.detected %}
+### Consent Measurement
+- **Platform:** {{ audit.consent_at_gate.detected }}
+- **Granted:** {{ audit.consent_at_gate.granted }} · **Verified:** {{ audit.consent_at_gate.verified }}
+{% endif %}
+{% if audit.payment_stage and audit.payment_stage.providers %}
+### Payment Surface
+- **Providers referenced:** {{ audit.payment_stage.providers | join(', ') }}
+- **Card fields present:** {{ audit.payment_stage.card_surface | length }}
+- **Provider mention only (no live card surface):** {{ audit.payment_stage.provider_mentions_only or False }}
+{% endif %}
+{% endif %}
+
+{% if audit and (audit.frame_harvest or audit.worker_harvest) %}
+### Sub-surface Coverage
+- **Frames inspected:** {{ audit.frame_harvest | length }}
+- **Workers inspected:** {{ audit.worker_harvest | length }}
+{% endif %}
+
+{% if audit %}
+---
+
+## Measurement Ledger (Full Evidence)
+
+### Identity & Provenance
+- **Primary pixel:** `{{ audit.get('detected_pixel_id') or 'none' }}`
+- **Provenance:** {{ audit.get('pixel_id_source') or 'n/a' }}
+- **Engine that produced the evidence:** {{ audit.get('engine_used') or 'n/a' }}
+- **Tracking architecture inferred:** {{ audit.get('tracking_mode_inferred') or 'n/a' }}
+- **Audit purity — synthetic events generated:** {{ audit.get('synthetic_fbq_generated', False) }}
+{% if audit.get('detected_pixel_ids') %}
+- **All identifiers discovered:**
+{% for e in audit.get('detected_pixel_ids') %}  - `{{ e.pixel_id }}` — sources: {{ e.sources | join(', ') }} ({{ e.hits }} hit(s))
+{% endfor %}{% endif %}
+{% if audit.get('pixel_validations') %}
+- **Meta-side validation:**
+{% for v in audit.get('pixel_validations') %}  - `{{ v.id }}` — HTTP {{ v.meta_config_http_status }}, {{ v.meta_config_size_bytes }} bytes, verdict **{{ v.verdict }}**
+{% endfor %}{% endif %}
+{% if audit.get('tealium_pixels') %}
+- **Recovered from tag-manager configuration (no browser required):**
+{% for t in audit.get('tealium_pixels') %}  - `{{ t.pixel_id }}` (score {{ t.score }})
+{% endfor %}{% endif %}
+{% if audit.get('first_party_meta_hits') %}
+- **First-party proxied Meta endpoints:** {{ audit.get('first_party_meta_hits') | length }}
+{% endif %}
+{% if audit.get('gtm_id') %}- **Tag-manager container:** `{{ audit.get('gtm_id') }}`{% endif %}
+
+### Transmission Evidence
+- **Loader (`fbevents.js`) observed:** {{ audit.get('meta_fbevents_loaded', False) }}
+- **Config bundle observed:** {{ audit.get('meta_config_seen', False) }}
+- **Pixel fired:** {{ audit.get('pixel_fired', False) }}
+- **Server-call (`/tr`) transmissions:** {{ (audit.get('meta_tr_events') or []) | length }}
+{% if audit.get('meta_fb_observations') %}- **Request counts:** loader {{ audit.meta_fb_observations.get('fbevents_js_requests', 0) }}, config {{ audit.meta_fb_observations.get('config_bundle_requests', 0) }}, `/tr` {{ audit.meta_fb_observations.get('facebook_com_tr_requests', 0) }}{% endif %}
+- **Browser calls captured:** {{ audit.get('fbq_unique_call_count', 0) }} unique{% if audit.get('fbq_call_types') %} ({{ audit.get('fbq_call_types') }}){% endif %}
+- **Events observed:** {{ (audit.get('fbq_events_observed') or []) | join(', ') or 'none' }}
+{% if audit.get('fbq_events_with_event_id') %}- **Deduplication identifiers:** {{ (audit.get('fbq_events_with_event_id') or []) | length }} event ID(s) captured{% endif %}
+- **Shared browser/server `event_id`:** {{ audit.get('has_shared_event_id', False) }}
+{% if audit.get('capi_events') %}- **Server-side (CAPI) payloads captured:** {{ (audit.get('capi_events') or []) | length }}{% endif %}
+
+### Funnel Event Coverage
+| Event | Observed |
+|---|---|
+| AddToCart | {{ audit.get('has_add_to_cart', False) }} |
+| InitiateCheckout | {{ audit.get('has_initiate_checkout', False) }} |
+| Purchase | {{ audit.get('has_purchase_event', False) }} |
+- **Event data present:** {{ audit.get('has_event_data', False) }}
+- **Unhashed PII transmitted:** {{ audit.get('has_unhashed_pii', False) }}
+
+### Access & Blocking
+- **Blocked status:** {{ audit.get('blocked_status') or 'none' }}
+- **Blocked requests:** {{ (audit.get('blocked_requests') or []) | length }}
+{% if audit.get('observed_exits') %}- **Checkout exits observed:** {{ (audit.get('observed_exits') or []) | length }}{% endif %}
+{% if audit.get('boundary_evidence') %}- **Boundary captures:** {{ (audit.get('boundary_evidence') or []) | length }}{% endif %}
+{% if audit.get('checkout_blockers') %}- **Classified blockers:**
+{% for b in audit.get('checkout_blockers') %}  - {{ b.get('kind') }}{% if b.get('guest_available') %} (guest path offered){% endif %}
+{% endfor %}{% endif %}
+{% if audit.get('guest_recon') and audit.get('guest_recon').get('attempted') %}- **Guest-path reconnaissance:** {{ audit.guest_recon.get('verdict') }} — controls seen: {{ (audit.guest_recon.get('controls') or []) | join(', ') }}{% endif %}
+{% if audit.get('guest_attempts') %}- **Guest attempts:**
+{% for g in audit.get('guest_attempts') %}  - "{{ g.get('control') }}" → stayed in flow: {{ g.get('stayed_in_flow') }}
+{% endfor %}{% endif %}
+
+*Raw network buffers, DOM inventories and internal step counters are retained in the machine-readable evidence file and omitted here for readability.*
+{% endif %}

@@ -542,6 +542,15 @@ class L2TrackingScanner(AbstractLeakScanner):
                 'observed_events': _probe_fbq_events,
                 'tracking_architecture': tracking_architecture,
                 'measurement_gate': 'verified',
+                'gtag_ids': _tl.get('gtag_ids') or [],
+                'guest_recon': _tl.get('guest_recon') or {},
+                'payment_stage': _tl.get('payment_stage') or {},
+                'checkout_blockers': _tl.get('checkout_blockers') or [],
+                'frame_harvest': _tl.get('frame_harvest') or [],
+                'worker_harvest': _tl.get('worker_harvest') or [],
+                'consent_at_gate': _tl.get('consent_at_gate') or {},
+                'items_added_verified': _tl.get('items_added_verified') or 0,
+                'fulfilment_result': _tl.get('fulfilment_result') or {},
             }
             _checks = [
                 ('browser_add_to_cart_missing', detect_missing_add_to_cart(_tl), 0.70,
@@ -564,6 +573,22 @@ class L2TrackingScanner(AbstractLeakScanner):
                         evidence=dict(_base),
                     ))
                     _have.add(_sig)
+            # Per-pixel funnel gaps: only for pixels that actually transmitted, and
+            # only when a basket was genuinely built. Never fabricates a gap.
+            _gaps = {}
+            for _v in _verdicts:
+                if _v.get('transmission') == 'transmitting' and _v.get('missing_events'):
+                    _gaps[_v['pixel_id']] = _v['missing_events']
+            if _gaps and (_tl.get('items_added_verified') or 0) > 0 and 'pixel_funnel_event_gap' not in _have:
+                leaks.append(Leak(
+                    page_id=page.id,
+                    tier='L2',
+                    signal='pixel_funnel_event_gap',
+                    severity=0.72,
+                    recommendation='These transmitting pixels observed a verified basket but fired no AddToCart/InitiateCheckout/Purchase. Map each funnel stage to the pixel that owns it.',
+                    evidence=dict(_base, per_pixel_gaps=_gaps),
+                ))
+                _have.add('pixel_funnel_event_gap')
             _dormant = [v['pixel_id'] for v in _verdicts if v.get('dormant')]
             if _dormant and 'pixel_provisioned_but_dormant' not in _have:
                 leaks.append(Leak(

@@ -76,8 +76,64 @@ class OutreachBuilder(AbstractOutreachBuilder):
                     summary += f"Meta Pixel: {'Detected' if pixel_detected else 'MISSING'}."
                     leak.evidence['network_requests'] = summary
         
+        # [SEED:2399] Harvest the measured audit context from the leaks themselves.
+        # No signature change: every detector leak already carries this evidence.
+        _audit = {}
+        # [SEED:2399] Authoritative source: the probe output already on page.raw.
+        _raw = getattr(page, "raw", None)
+        _nl = {}
+        if isinstance(_raw, dict):
+            if isinstance(_raw.get("network_log"), dict):
+                _nl = _raw["network_log"]
+            elif _raw.get("detected_pixel_id") or _raw.get("pixel_fired"):
+                _nl = _raw
+        _INTERNAL = {"_meta_prev", "requests", "request_attempts", "fbq_raw_calls",
+                     "session_fingerprint", "step_budget_exhausted",
+                     "meta_observations_by_step", "tracking_diagnostics",
+                     "basket_state", "fulfilment_steps", "funnel_steps",
+                     "checkout_snapshot", "auth_page_evidence",
+                     "consent_events", "consent_result"}
+        for _k, _v in (_nl or {}).items():
+            if _k in _INTERNAL or _k.startswith("_"):
+                continue
+            if _v not in (None, [], {}, ""):
+                _audit[_k] = _v
+
+        _keys = ("pixel_census", "per_pixel_verdicts", "per_pixel", "gtag_ids",
+                 "guest_recon", "payment_stage", "checkout_blockers",
+                 "frame_harvest", "worker_harvest", "consent_at_gate",
+                 "pixel_evidence_grade", "items_added_verified",
+                 "fulfilment_result", "detected_pixel_ids")
+        for _lk in leaks:
+            _ev = getattr(_lk, "evidence", None)
+            if not isinstance(_ev, dict):
+                continue
+            for _k in _keys:
+                if _k in _ev and _k not in _audit and _ev[_k] not in (None, [], {}, ""):
+                    _audit[_k] = _ev[_k]
+        # Client-facing readability: replace heavy structures with a summary line.
+        _heavy = {"pixel_census": "pixels", "per_pixel_verdicts": None,
+                  "per_pixel": None, "frame_harvest": None, "worker_harvest": None,
+                  "checkout_blockers": None, "detected_pixel_ids": None}
+        for _lk in leaks:
+            _ev = getattr(_lk, "evidence", None)
+            if not isinstance(_ev, dict):
+                continue
+            for _k in list(_ev.keys()):
+                if _k not in _heavy:
+                    continue
+                _v = _ev[_k]
+                if _k == "pixel_census" and isinstance(_v, dict):
+                    _ev[_k] = (f"{_v.get('total_ids', 0)} pixel ID(s) found; "
+                               f"{_v.get('confirmed_real', 0)} confirmed live; "
+                               f"{_v.get('transmitting', 0)} transmitting; "
+                               f"{_v.get('static_only', 0)} dormant. See census below.")
+                elif isinstance(_v, (list, dict)):
+                    _ev[_k] = f"{len(_v)} item(s) — see detailed section below."
         template = self.env.get_template("teardown.md.j2")
-        return template.render(page=page, leaks=leaks, fixes=fixes, estimated_recovery=estimated_recovery)
+        return template.render(page=page, leaks=leaks, fixes=fixes,
+                               estimated_recovery=estimated_recovery,
+                               audit=_audit, financial_data=financial_data)
 
     def _estimate_recovery(self, page: Page, leaks: list[Leak], financial_data: dict | None = None) -> str:
         # [SEED: 2399] HARD FINANCIAL DATA (Graph API Insights)

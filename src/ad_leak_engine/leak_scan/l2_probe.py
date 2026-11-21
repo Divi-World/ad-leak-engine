@@ -429,6 +429,34 @@ class L2LiveProbe:
         return result
 
     def _infer_tracking_mode(self, funnel_log: dict) -> str:
+        """Verdict strings are unchanged; an additive detail record explains them."""
+        _mode = self._infer_tracking_mode_core(funnel_log)
+        try:
+            _tr = len(funnel_log.get("meta_tr_events") or [])
+            _fired = bool(funnel_log.get("pixel_fired"))
+            _ev = bool(funnel_log.get("fbq_events_observed"))
+            _grade = funnel_log.get("pixel_evidence_grade")
+            if _tr > 0:
+                _detail = "network_transmission_confirmed"
+            elif _fired or _ev:
+                _detail = "browser_call_observed"
+            elif funnel_log.get("meta_config_seen"):
+                _detail = "config_loaded_transmission_unconfirmed"
+            elif _grade == "static_only":
+                _detail = "static_discovery_only"
+            elif _grade == "exempt_unmeasured":
+                _detail = "exempt_not_measured"
+            else:
+                _detail = "unclassified"
+            funnel_log["tracking_evidence_detail"] = {
+                "verdict": _mode, "grade": _grade, "transmissions": _tr,
+                "browser_calls_observed": _fired or _ev, "detail": _detail,
+            }
+        except Exception:
+            pass
+        return _mode
+
+    def _infer_tracking_mode_core(self, funnel_log: dict) -> str:
         """Classify the store's tracking setup based on what the funnel observed."""
         pv = funnel_log.get("pixel_validation") or {}
         verdict = pv.get("verdict")
@@ -953,6 +981,10 @@ originalPermissionsQuery(parameters)
         logger.info(f"[PIXEL_SET] {json.dumps(out)}")
         return out
 
+    @staticmethod
+    def _fn_pre(u):
+        return str(u).split(chr(63))[0].rsplit(chr(47), 1)[-1]
+
     def _resolve_tealium_pixels(self, all_requests: list, referer_url: str) -> list:
         """
         Static, browser-free Meta pixel extraction from Tealium iQ tag files.
@@ -982,8 +1014,18 @@ originalPermissionsQuery(parameters)
                     f"fetching {min(len(_prio), 24)} (numbered tag configs first)")
         for u in _prio[:24]:
             try:
-                resp = cffi_requests.get(u, impersonate="chrome120", timeout=8,
-                                         headers={"Referer": referer_url})
+                resp = None
+                for _att, _tmo in enumerate((8, 16, 26)):
+                    try:
+                        resp = cffi_requests.get(u, impersonate="chrome120", timeout=_tmo,
+                                                 headers={"Referer": referer_url})
+                        break
+                    except Exception as _fe:
+                        if _att == 2:
+                            raise
+                        logger.info(f"[TEALIUM_RETRY] {self._fn_pre(u)} attempt {_att + 1} failed "
+                                    f"({type(_fe).__name__}); retrying with {_tmo * 2}s budget")
+                        time.sleep(1.0 + _att)
                 if resp.status_code != 200:
                     logger.warning(f"[TEALIUM_HTTP] {resp.status_code} {u[:110]}")
                     continue
@@ -1030,6 +1072,12 @@ originalPermissionsQuery(parameters)
             any(t in ("required only", "let me choose", "reject all", "manage preferences") for t in texts)
             or "onetrust" in classes or "cookie-setting-link" in classes
             or "cookiebot" in classes
+            or any(_v in classes for _v in (
+                "didomi", "usercentrics", "trustarc", "truste", "quantcast", "qc-cmp",
+                "osano", "complianz", "cmplz", "borlabs", "iubenda", "termly",
+                "cookie-consent", "cookieconsent", "cc-window", "cookie-notice"))
+            or any(_t in ("accept selection", "confirm my choices", "save and accept",
+                          "customize", "cookie settings", "privacy settings") for _t in texts)
         )
         pats = [
             (r"^accept all", "onetrust"),
@@ -1039,6 +1087,18 @@ originalPermissionsQuery(parameters)
             (r"^i accept$", "generic"),
             (r"^agree$", "generic"),
             (r"^accept$", "generic"),
+            (r"^accept and continue$", "generic"),
+            (r"^accept & close$", "generic"),
+            (r"^accept and close$", "generic"),
+            (r"^agree and proceed$", "generic"),
+            (r"^agree and close$", "generic"),
+            (r"^accept cookies$", "generic"),
+            (r"^allow cookies$", "generic"),
+            (r"^allow selection$", "generic"),
+            (r"^yes, i agree$", "generic"),
+            (r"^ok, accept$", "generic"),
+            (r"^accept all services$", "usercentrics"),
+            (r"^agree to all$", "didomi"),
         ]
         pick = None
         for pat, vendor in pats:
@@ -1067,7 +1127,19 @@ originalPermissionsQuery(parameters)
         if not out["granted"]:
             for sel in ("#onetrust-accept-btn-handler",
                         "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
-                        "#CybotCookiebotDialogBodyButtonAccept"):
+                        "#CybotCookiebotDialogBodyButtonAccept",
+                        "#didomi-notice-agree-button",
+                        "[data-testid='uc-accept-all-button']",
+                        "#truste-consent-button",
+                        ".trustarc-consent-btn",
+                        ".osano-cm-accept-all",
+                        "#cmplz-accept",
+                        ".cmplz-btn.cmplz-accept",
+                        "#BorlabsCookieBoxSaveButton",
+                        ".iubenda-cs-accept-btn",
+                        "[data-tid='banner-accept']",
+                        ".qc-cmp2-summary-buttons button",
+                        "#onetrust-accept-btn-handler"):
                 try:
                     loc = page.locator(sel).first
                     if loc.is_visible(timeout=800):
@@ -1112,7 +1184,20 @@ originalPermissionsQuery(parameters)
                 out["cookie_granted"] = bool(out["optanon_groups"] and ":1" in out["optanon_groups"])
             except Exception:
                 out["cookie_granted"] = False
-            out["verified"] = bool(out["granted"] and (st.get("any_granted") or out["banner_dismissed"] or out["cookie_granted"]))
+            try:
+                _all_ck = self._mw(page, "() => document.cookie") or ""
+                _names = [c.split("=")[0].strip() for c in _all_ck.split(";") if "=" in c]
+                _VN = ("CookieConsent", "notice_preferences", "notice_behavior",
+                       "QCconsent", "didomi_token", "uc_settings",
+                       "osano_consentmanager", "cmplz_consented_services",
+                       "borlabs-cookie", "termly_consent", "OptanonConsent")
+                out["vendor_cookies"] = [n for n in _names
+                                         if any(n.startswith(v) or v in n for v in _VN)]
+            except Exception:
+                out["vendor_cookies"] = []
+            out["verified"] = bool(out["granted"] and (st.get("any_granted")
+                                 or out["banner_dismissed"] or out["cookie_granted"]
+                                 or bool(out.get("vendor_cookies"))))
             out["state"] = st
         except Exception as e:
             out["state_error"] = str(e)
@@ -3801,6 +3886,16 @@ originalPermissionsQuery(parameters)
         merged_log["first_party_meta_hits"] = _fp_hits
         if _fp_hits:
             logger.info(f"[FIRST_PARTY_META] {json.dumps(_fp_hits)[:900]}")
+        # [FINAL_TR_SETTLE] Meta may initialise on the last page visited. Give the
+        # transmission a bounded window so a late /tr is not lost from the census.
+        if not merged_log.get("meta_tr_events"):
+            _dl = time.time() + 15
+            while time.time() < _dl and not merged_log.get("meta_tr_events"):
+                time.sleep(1.5)
+                _caps = self._wait_for_fbq_and_capture(page, all_requests, timeout=4)
+                self._merge_funnel_captures(merged_log, _caps, "final_settle")
+                self._record_meta_delta(merged_log, all_requests, page, "final_settle")
+            logger.info(f"[FINAL_TR_SETTLE] tr={len(merged_log.get('meta_tr_events') or [])}")
         merged_log["pixel_census"] = self._pixel_census(merged_log)
         _cen = merged_log["pixel_census"]
         if _cen.get("primary_pixel_id") and not merged_log.get("detected_pixel_id"):

@@ -638,8 +638,14 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                         f"[RESOURCE OPTIMIZATION] '{target_name}' is a large enterprise with in-house marketing. "
                         "Scan aborted to save compute. Pivot to mid-market competitors."
                     )
-                    _fail_job(job_id, Exception(msg), stage="guard")
-                    raise Exception(msg)
+                    # [SEED:2399] DIRECT-MODE POLICY: the caller supplied this URL
+                    # explicitly. Big-brand filtering protects NICHE discovery from
+                    # wasted compute (BRANCH 2 keeps its own guard); it must not
+                    # refuse an explicitly requested direct audit. Record and proceed.
+                    logger.info(f"[DIRECT_POLICY] '{target_name}' matches the big-brand "
+                                "list; proceeding because the URL was supplied explicitly.")
+                    _write_status(job_id, {"status": "running", "progress": 12,
+                                           "stage": f"Direct audit of {target_name} (enterprise domain, caller-requested)"})
 
             if not target_landing:
                  _fail_job(job_id, Exception("No valid landing URL provided for Direct Mode"), stage="input_validation")
