@@ -145,6 +145,16 @@ def _is_valid_business_email(email: str) -> bool:
     if local.endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.js', '.css')):
         return False
 
+    # [ASSET_DOMAIN_2399] Asset filenames masquerade as emails: the extension
+    # sits in the DOMAIN (photo_600x600@2x.jpg), which the local check misses.
+    if domain.endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.js',
+                        '.css', '.woff', '.woff2', '.ttf', '.ico', '.pdf', '.zip',
+                        '.mp4', '.webm', '.avif')):
+        return False
+    # A routable domain must end in an alphabetic TLD of at least two characters.
+    if not re.search(r'\.[a-z]{2,}$', domain):
+        return False
+
     return True
 
 def discover_phone_numbers_from_page(html: str) -> list[str]:

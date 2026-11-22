@@ -4417,25 +4417,46 @@ originalPermissionsQuery(parameters)
             "woocommerce", "wp-content/plugins/woocommerce",
             "bigcommerce", "bigcommerce.com/s-",
             "add-to-cart", "add_to_cart", "product-form",
-            '"@type": "product"', "application/ld+json",
+            '"@type": "product"', '"@type":"product"',
+            "demandware", "dwvar_", "on/demandware.store", "demandware.static",
+            "sfcc", "salesforce commerce", "magento", "mage/cookies",
+            "hybris", "commercetools", "elasticpath", "nopcommerce",
+            "prestashop", "opencart",
+            "add-to-bag", "add to basket", "add-to-basket", "add to bag",
+            "shopping bag", "mini-cart", "minicart", "cart-count", "basket-count",
+            "checkout-button",
         ]
         try:
-            resp = cffi_requests.get(
-                url,
-                impersonate="chrome120",
-                timeout=10,
-                proxies=proxy_cfg,
-                allow_redirects=True,
-            )
+            resp = None
+            # [ECOMM_TRANSPORT] Bot managers (Akamai/Cloudflare/DataDome) reject Tor exits;
+            # a 403/429/503, a stub body, OR a dead proxy is a TRANSPORT outcome,
+            # not evidence of a non-commerce site. The funnel already runs direct,
+            # so the detector must be able to as well. Tor is still tried first.
+            for _tp in (proxy_cfg, None):
+                try:
+                    _r = cffi_requests.get(url, impersonate="chrome120", timeout=10,
+                                         proxies=_tp, allow_redirects=True)
+                except Exception:
+                    _r = None
+                if (_r is not None and getattr(_r, "status_code", 0) not in (403, 429, 503)
+                        and len(_r.text or "") >= 6000):
+                    resp = _r
+                    break
+            if resp is None:
+                raise RuntimeError("ECOMM transport unavailable: " + url)
             body = (resp.text or "").lower()
             headers_str = str(resp.headers).lower()
             if any(m in body for m in markers):
                 logger.info(f"[ECOMM] Body marker hit on {url}")
                 return True
-            if any(h in headers_str for h in ("x-shopid", "x-shopify-stage", "x-sorting-hat-pod")):
+            if any(h in headers_str for h in ("x-shopid", "x-shopify-stage",
+                                              "x-sorting-hat-pod", "x-dw-",
+                                              "x-magento", "x-hybris",
+                                              "x-commerce", "set-cookie: dwanonymous")):
                 logger.info(f"[ECOMM] Shopify header hit on {url}")
                 return True
-            for probe_path in ("/cart", "/cart.js"):
+            for probe_path in ("/cart", "/cart.js", "/basket", "/bag",
+                               "/trolley", "/checkout"):
                 try:
                     p_resp = cffi_requests.head(
                         urljoin(url, probe_path),
@@ -4481,6 +4502,37 @@ originalPermissionsQuery(parameters)
             if "bigcommerce" in headers_str or "stencil" in headers_str:
                 logger.info(f"[ECOMM] BigCommerce header hit on {url}")
                 return True
+            if len(body) < 6000:
+                logger.info(f"[ECOMM_STUB] body only {len(body)} bytes on {url}; "
+                            f"marker absence is not proof of non-commerce")
+            # [ECOMM_STORE_LEVEL] Some retailers carry product markup only on
+            # category/product pages. Before declaring non-commerce, test two
+            # store-level signals that hold regardless of which page we landed on:
+            #   1. basket/cart API reachability under the site root
+            #   2. platform fingerprints in the response headers
+            from urllib.parse import urlparse as _up
+            try:
+                _host = _up(url).netloc.lower().replace('www.', '')
+                if _host:
+                    for _ep in ("/basket-api/v1/basket/items", "/api/v1/basket",
+                                "/rest/model?template=cart", "/checkout/cart"):
+                        try:
+                            _er = cffi_requests.get("https://" + _host + _ep,
+                                                   impersonate="chrome120", timeout=8,
+                                                   allow_redirects=False)
+                            if _er.status_code in (200, 401, 403):
+                                logger.info(f"[ECOMM_STORE_LEVEL] {_ep} -> {_er.status_code} on {_host}")
+                                return True
+                        except Exception:
+                            pass
+                    _hs = str(getattr(resp, "headers", {})).lower()
+                    for _fp in ("x-argos-brand", "demandware", "dwanonymous", "sfcc",
+                                "stencil", "magento", "x-magento", "commercetools"):
+                        if _fp in _hs:
+                            logger.info(f"[ECOMM_STORE_LEVEL] header '{_fp}' on {_host}")
+                            return True
+            except Exception as _se:
+                logger.debug(f"[ECOMM_STORE_LEVEL] skipped: {_se}")
             logger.info(f"[ECOMM] No e-commerce signals found for {url}")
             return False
         except Exception as e:
