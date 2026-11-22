@@ -10,7 +10,7 @@ from ..tasks import run_scan_pipeline_task
 from pydantic import BaseModel
 from typing import Optional
 
-from ...ingest.playwright_source import PlaywrightSource
+from ...ingest.hybrid_router import HybridRouter
 from ...leak_scan.l1_creative import L1CreativeScanner
 from ...leak_scan.l2_tracking import L2TrackingScanner
 from ...leak_scan.l3_scanner import L3SiteScanner
@@ -578,7 +578,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
     # --- SHARED INITIALIZATION ---
     init_db()
     repo = AdRepository()
-    source = PlaywrightSource(headless=True)
+    source = HybridRouter()
 
     l1, l2, l3 = L1CreativeScanner(), L2TrackingScanner(), L3SiteScanner()
     detector, forge = PlatformDetector(), FixForge()

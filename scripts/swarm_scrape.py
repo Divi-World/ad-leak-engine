@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-from ad_leak_engine.ingest.playwright_source import PlaywrightSource
+from ad_leak_engine.ingest.hybrid_router import HybridRouter
 
 def main():
     parser = argparse.ArgumentParser()
@@ -18,7 +18,7 @@ def main():
     parser.add_argument("--output-dir", default="output/swarm")
     args = parser.parse_args()
 
-    source = PlaywrightSource(headless=True)
+    source = HybridRouter()
     ads = list(source.search(args.keyword, args.country, args.max_results))
 
     out_dir = Path(args.output_dir)

@@ -13,7 +13,7 @@ if sys.platform == "win32":
     except Exception:
         os.environ["PYTHONIOENCODING"] = "utf-8"
 
-from .ingest.playwright_source import PlaywrightSource
+from .ingest.hybrid_router import HybridRouter
 from .leak_scan.l1_creative import L1CreativeScanner
 from .leak_scan.l2_tracking import L2TrackingScanner
 from .leak_scan.l3_scanner import L3SiteScanner
@@ -218,7 +218,7 @@ def cmd_scan(keyword: str, country: str, limit: int, skip_crawl: bool):
     init_db()
     repo = AdRepository()
 
-    source = PlaywrightSource(headless=True)
+    source = HybridRouter()
     print("[ALE] Launching stealth browser and pulling ads...")
     ads = list(source.search(keyword, country, max_results=50))
     

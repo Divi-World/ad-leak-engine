@@ -4433,23 +4433,15 @@ originalPermissionsQuery(parameters)
             "checkout-button",
         ]
         try:
-            resp = None
-            # [ECOMM_TRANSPORT] Bot managers (Akamai/Cloudflare/DataDome) reject Tor exits;
-            # a 403/429/503, a stub body, OR a dead proxy is a TRANSPORT outcome,
-            # not evidence of a non-commerce site. The funnel already runs direct,
-            # so the detector must be able to as well. Tor is still tried first.
-            for _tp in (proxy_cfg, None):
-                try:
-                    _r = cffi_requests.get(url, impersonate="chrome120", timeout=10,
-                                         proxies=_tp, allow_redirects=True)
-                except Exception:
-                    _r = None
-                if (_r is not None and getattr(_r, "status_code", 0) not in (403, 429, 503)
-                        and len(_r.text or "") >= 6000):
-                    resp = _r
-                    break
-            if resp is None:
-                raise RuntimeError("ECOMM transport unavailable: " + url)
+            # [STEALTH_DELEGATION] Use system's own multi-layer WAF bypass engine
+            # instead of reimplementing transport logic inline. Proven superior:
+            # adds Cloudflare/Turnstile detection, UA rotation, Playwright anti-detect,
+            # exponential backoff retry. Returns HTML string or None.
+            from ..shared.waf_bypass import stealth_fetch
+            _html = stealth_fetch(url, max_retries=2)
+            if _html is None:
+                raise RuntimeError("ECOMM transport unavailable (all stealth layers failed): " + url)
+            resp = type("_FakeResp", (), {"text": _html, "headers": {}, "status_code": 200})()
             body = (resp.text or "").lower()
             headers_str = str(resp.headers).lower()
             if any(m in body for m in markers):
