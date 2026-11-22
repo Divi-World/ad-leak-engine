@@ -3569,7 +3569,13 @@ originalPermissionsQuery(parameters)
         product_url = self._find_product_link(page, landing_url)
         if not product_url:
             logger.info(f"[FUNNEL/{runner_name}] No product on landing. Trying /collections/all and /shop")
-            for fallback in ("/collections/all", "/shop", "/products"):
+            # [L44_PLATFORM_FALLBACKS] Enterprise platforms do not use
+            # Shopify collection paths. SFCC uses /browse/, Magento uses
+            # /catalogsearch/result/, Hybris/commercetools use /search.
+            # Try each convention; the first that yields a product link wins.
+            for fallback in ("/collections/all", "/shop", "/products",
+                               "/browse/", "/category/", "/catalogsearch/result/?q=dress",
+                               "/search?q=dress", "/on/demandware.store/Sites-Site/default/Search-ShowKeywords?keywords=dress"):
                 try:
                     fb_url = urljoin(landing_url, fallback)
                     page.goto(fb_url, wait_until="domcontentloaded", timeout=30000)
