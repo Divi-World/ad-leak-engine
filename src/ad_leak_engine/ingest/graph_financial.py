@@ -9,6 +9,33 @@ import httpx
 
 GRAPH_BASE = "https://graph.facebook.com/v19.0"
 
+def _as_float(v, default=0.0):
+    """Accept a scalar OR Meta's structured action-value array. Never raises."""
+    if v is None:
+        return default
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        try:
+            return float(v)
+        except ValueError:
+            return default
+    if isinstance(v, list):
+        for _pref in ("purchase", "omni_purchase"):
+            for _it in v:
+                if isinstance(_it, dict) and _it.get("action_type") == _pref:
+                    try:
+                        return float(_it.get("value", default))
+                    except (TypeError, ValueError):
+                        return default
+        for _it in v:
+            if isinstance(_it, dict) and "value" in _it:
+                try:
+                    return float(_it["value"])
+                except (TypeError, ValueError):
+                    pass
+    return default
+
 
 class GraphAPIFinancialIngestor:
     """Queries the Meta Ads Insights API for hard financial data."""
@@ -35,7 +62,8 @@ class GraphAPIFinancialIngestor:
             pass
         return []
 
-    def get_account_insights(self, account_id: str, days: int = 30) -> dict | None:
+    def get_account_insights(self, account_id: str, days: int = 30,
+                             account_currency: str | None = None) -> dict | None:
         """Fetch actual spend, CPA, ROAS for an ad account.
         Endpoint: GET /act_{id}/insights
         Fields: spend,actions,action_values,cost_per_action_type,purchase_roas
@@ -57,23 +85,23 @@ class GraphAPIFinancialIngestor:
                 data = resp.json().get("data", [])
                 if data:
                     row = data[0]
-                    spend = float(row.get("spend", 0))
-                    roas = float(row.get("purchase_roas", 0))
-                    impressions = int(row.get("impressions", 0))
-                    clicks = int(row.get("clicks", 0))
+                    spend = _as_float(row.get("spend", 0))
+                    roas = _as_float(row.get("purchase_roas", 0))
+                    impressions = int(_as_float(row.get("impressions", 0)))
+                    clicks = int(_as_float(row.get("clicks", 0)))
 
                     # Extract CPA from cost_per_action_type array
                     cpa = None
                     for action in row.get("cost_per_action_type", []):
                         if action.get("action_type") == "purchase":
-                            cpa = float(action.get("value", 0))
+                            cpa = _as_float(action.get("value", 0))
                             break
 
                     # Extract purchase count from actions array
                     purchases = 0
                     for action in row.get("actions", []):
                         if action.get("action_type") == "purchase":
-                            purchases = int(action.get("value", 0))
+                            purchases = int(_as_float(action.get("value", 0)))
                             break
 
                     return {
@@ -83,7 +111,7 @@ class GraphAPIFinancialIngestor:
                         "impressions": impressions,
                         "clicks": clicks,
                         "purchases": purchases,
-                        "currency": "USD",
+                        "currency": account_currency or "USD",
                         "period_days": days,
                         "source": "meta_graph_api_live",
                     }
@@ -101,7 +129,10 @@ class GraphAPIFinancialIngestor:
         if accounts:
             # Use the first account (single-tenant mode)
             acct = accounts[0]
-            insights = self.get_account_insights(acct.get("id", ""), days)
+            insights = self.get_account_insights(
+                acct.get("id", ""), days,
+                account_currency=acct.get("currency"),
+            )
             if insights:
                 insights["account_name"] = acct.get("name", "Unknown")
                 return insights

@@ -1,7 +1,8 @@
 """Ad persistence repository [SEED: 2399]."""
 import json
 
-from sqlmodel import Session
+from sqlmodel import Session, select
+from sqlalchemy import func
 
 from ..shared.schemas import RawAd
 from .db import engine
@@ -31,7 +32,7 @@ class AdRepository:
 
     def count_ads(self) -> int:
         with Session(engine) as session:
-            return len(session.query(AdRecord).all())
+            return session.exec(select(func.count()).select_from(AdRecord)).one()
 
 
 class TenantRepository:
