@@ -88,7 +88,12 @@ class Fix(BaseModel):
     """Platform-specific implementation guide with executable code."""
     id: str = Field(default_factory=lambda: _short_id("fix_"))
     leak_id: str
-    platform: Literal["shopify", "woocommerce", "bigcommerce", "custom"]
+    platform: Literal[
+        "shopify", "woocommerce", "bigcommerce", "custom",
+        "magento", "sfcc", "demandware", "hybris", "commercetools",
+        "wix", "squarespace", "presta_shop", "opencart", "nop_commerce",
+        "nextjs", "nuxtjs", "headless", "enterprise_marketplace"
+    ]
     platform_confidence: float
     markdown_guide: str
     code_blocks: list[dict] = Field(default_factory=list)

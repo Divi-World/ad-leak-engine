@@ -28,6 +28,17 @@ class OutreachBuilder(AbstractOutreachBuilder):
 
     def build(self, page: Page, leaks: list[Leak], fixes: list[Fix], financial_data: dict | None = None) -> OutreachPack:
         """Assemble teardown, message, and evidence into an OutreachPack."""
+        # [SEED: 2399] QUALITY GATE: Validate all fix code blocks before assembly
+        # Prevents malformed Liquid/JS/PHP snippets reaching client-facing teardowns
+        from ..fix_forge.validation import validate_fix
+        valid_fixes = []
+        for fix in fixes:
+            if validate_fix(fix):
+                valid_fixes.append(fix)
+            else:
+                logger.warning(f"[OUTREACH] Fix rejected by validation: {getattr(fix, 'template_name', 'unknown')}")
+        fixes = valid_fixes
+
         # Rank leaks by severity (highest first)
         leaks = sorted(leaks, key=lambda l: l.severity, reverse=True)
 
