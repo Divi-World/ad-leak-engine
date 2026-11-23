@@ -40,7 +40,39 @@ class OutreachBuilder(AbstractOutreachBuilder):
         fixes = valid_fixes
 
         # Rank leaks by severity (highest first)
-        leaks = sorted(leaks, key=lambda l: l.severity, reverse=True)
+        # [SEED:2399] Learned-weight prioritisation. Additive: severity/confidence
+        # values are never altered; the score is exposed in evidence for auditability.
+        # Any degraded weights state falls back to neutral 1.0 — a scan never breaks.
+        from ..leak_scan.scoring import calculate_priority_score
+        try:
+            from ..self_improve.weights import load_weights
+            _w = load_weights()
+            _w = _w if isinstance(_w, dict) else {}
+        except Exception:
+            _w = {}
+
+        def _weight_for(_l):
+            _t = _w.get(getattr(_l, "tier", "")) or {}
+            _v = _t.get(getattr(_l, "signal", ""), 1.0)
+            try:
+                _v = float(_v)
+            except (TypeError, ValueError):
+                _v = 1.0
+            return _v if _v > 0 else 1.0
+
+        for _l in leaks:
+            _wv = _weight_for(_l)
+            _sc = calculate_priority_score(_l, _wv)
+            _ev = getattr(_l, "evidence", None)
+            if isinstance(_ev, dict):
+                _ev["priority_score"] = round(_sc, 4)
+                _ev["applied_weight"] = _wv
+
+        leaks = sorted(
+            leaks,
+            key=lambda l: (calculate_priority_score(l, _weight_for(l)), l.severity),
+            reverse=True,
+        )
 
         # Calculate recovery BEFORE generating teardown so it can be passed in
         estimated_recovery = self._estimate_recovery(page, leaks)

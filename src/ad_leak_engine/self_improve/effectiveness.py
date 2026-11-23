@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-WEIGHTS_FILE = Path("data/scoring_weights.json")
+WEIGHTS_FILE = Path("data/fix_effectiveness.json")
 
 def _load_weights() -> dict:
     """Safely load existing weights, or return defaults."""
