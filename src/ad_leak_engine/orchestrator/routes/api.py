@@ -1070,14 +1070,16 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
 
                 for leak in leaks:
                     try:
-                        # Route to Custom for L1 to allow vertical strategy injection
-                        _plat_for_gen = 'custom' if getattr(leak, 'tier', '') == 'L1' else platform
-                        _conf_for_gen = 0.30 if getattr(leak, 'tier', '') == 'L1' else conf
+                        # [RW-1] Use actual platform for ALL tiers.
+                        # L1 creative leaks benefit from vertical-specific strategies
+                        # available in Shopify/WooCommerce generators.
+                        target_platform = platform or "custom"
+                        target_confidence = conf
                         
                         fix_obj = forge.generate(
                             leak,
-                            _plat_for_gen,
-                            _conf_for_gen,
+                            target_platform,
+                            target_confidence,
                             context_keywords=_ctx_keywords
                         )
                         fixes.append(fix_obj)
@@ -1417,7 +1419,15 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             fixes = []
             for leak in leaks:
                 try:
-                    fixes.append(forge.generate(leak, 'custom' if getattr(leak, 'tier', '') == 'L1' else platform, 0.30 if getattr(leak, 'tier', '') == 'L1' else conf, context_keywords=[keyword]))
+                    target_platform = platform or "custom"
+                    target_confidence = conf
+                    fix_obj = forge.generate(
+                        leak,
+                        target_platform,
+                        target_confidence,
+                        context_keywords=[keyword],
+                    )
+                    fixes.append(fix_obj)
                 except PlatformAmbiguousError:
                     fixes.append(forge.generate(leak, "custom", conf))
                 except Exception:
