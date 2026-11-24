@@ -4482,7 +4482,22 @@ originalPermissionsQuery(parameters)
             _html = stealth_fetch(url, max_retries=2)
             if _html is None:
                 raise RuntimeError("ECOMM transport unavailable (all stealth layers failed): " + url)
-            resp = type("_FakeResp", (), {"text": _html, "headers": {}, "status_code": 200})()
+            # [P0-1] stealth_fetch returns text only, which discarded the platform
+            # fingerprints this detector depends on. Recover the REAL response.
+            # Tor-first then direct, mirroring the original detector transport.
+            resp = None
+            for _tp in (proxy_cfg, None):
+                try:
+                    _r = cffi_requests.get(url, impersonate="chrome120", timeout=10,
+                                           proxies=_tp, allow_redirects=True)
+                except Exception:
+                    _r = None
+                if _r is not None and getattr(_r, "status_code", 0) == 200:
+                    resp = _r
+                    break
+            if resp is None:
+                resp = type("_StealthBody", (), {"text": _html, "headers": {}, "status_code": 200})()
+                logger.debug("[ECOMM] header recovery unavailable; body-only detection")
             body = (resp.text or "").lower()
             headers_str = str(resp.headers).lower()
             if any(m in body for m in markers):
@@ -4507,6 +4522,20 @@ originalPermissionsQuery(parameters)
                     if p_resp.status_code in (200, 302):
                         logger.info(f"[ECOMM] /cart responded {p_resp.status_code} on {url}")
                         return True
+                    # [P0-2] Same WAF reality _url_exists already handles: Akamai,
+                    # CloudFront and Salesforce reject HEAD with 5xx/405 while GET
+                    # works. Reuse that proven fallback on the same path.
+                    if p_resp.status_code in (403, 405, 500, 501, 502, 503, 504):
+                        _g = cffi_requests.get(
+                            urljoin(url, probe_path),
+                            impersonate="chrome120",
+                            timeout=8,
+                            proxies=proxy_cfg,
+                            allow_redirects=True,
+                        )
+                        if 200 <= _g.status_code < 400:
+                            logger.info(f"[ECOMM] {probe_path} GET-fallback {_g.status_code} on {url}")
+                            return True
                 except Exception:
                     pass
             try:
