@@ -19,6 +19,8 @@ class PlaywrightSource(AbstractAdSource):
     def __init__(self, headless: bool = True):
         self.headless = headless
         self.extractor = HtmlAdExtractor()
+        self.shard_index = None
+        self.total_shards = 10
 
     def search(self, query: str, country: str, max_results: int = 50) -> Iterator[RawAd]:
         # [SEED: 2399] SEMANTIC QUERY EXPANSION ENGINE
@@ -373,6 +375,14 @@ class PlaywrightSource(AbstractAdSource):
                 f"{query} buy", f"{query} agency"
             ])
             
+        if self.shard_index is not None:
+            total_shards = self.total_shards
+            chunk = len(queries_to_run) // total_shards
+            start_idx = self.shard_index * chunk
+            end_idx = start_idx + chunk
+            if self.shard_index == total_shards - 1:
+                end_idx = len(queries_to_run)
+            queries_to_run = queries_to_run[start_idx:end_idx]
         seen_ids = set()
         total_yielded = 0
         hb = HumanBrowser(headless=self.headless)

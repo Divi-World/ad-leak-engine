@@ -36,7 +36,7 @@ jobs:
       - name: Fetch camoufox
         run: python -m camoufox fetch
       - name: Scrape
-        run: python scripts/swarm_scrape.py --keyword "${{ inputs.keyword }}" --country "${{ inputs.country }}" --max-results 50
+        run: python scripts/swarm_scrape.py --keyword "${{ inputs.keyword }}" --country "${{ inputs.country }}" --max-results 50 --shard ${{ strategy.job-index }} --total-shards ${{ strategy.job-total }}
       - name: Upload
         if: always()
         uses: actions/upload-artifact@v4

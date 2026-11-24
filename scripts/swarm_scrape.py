@@ -16,9 +16,14 @@ def main():
     parser.add_argument("--country", default="US")
     parser.add_argument("--max-results", type=int, default=50)
     parser.add_argument("--output-dir", default="output/swarm")
+    parser.add_argument("--shard", type=int, default=None, help="Shard index for parallel execution")
+    parser.add_argument("--total-shards", type=int, default=10, help="Total number of shards")
     args = parser.parse_args()
 
     source = HybridRouter()
+    if args.shard is not None:
+        source.playwright.shard_index = args.shard
+        source.playwright.total_shards = args.total_shards
     ads = list(source.search(args.keyword, args.country, args.max_results))
 
     out_dir = Path(args.output_dir)
