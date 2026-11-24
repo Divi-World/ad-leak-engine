@@ -42,6 +42,14 @@ import os
 
 # --- CRITICAL FIX: Define Logger BEFORE any usage ---
 logger = logging.getLogger("ad_leak_engine.leak_scan.l2_probe")  # child of engine logger -> reaches logs/engine.log
+# [RW-4] lazy intent import (try/except: if import fails, empty fallback, no crash)
+try:
+    from src.ad_leak_engine.shared.intent import (
+        NON_ECOMMERCE_INTENTS, EXPECTED_EVENTS,
+    )
+except Exception:
+    NON_ECOMMERCE_INTENTS = set()
+    EXPECTED_EVENTS = {}
 
 # External Libs
 try:
@@ -687,6 +695,21 @@ originalPermissionsQuery(parameters)
             for sc in (e.get("sources") or []):
                 if sc not in s["sources"]:
                     s["sources"].append(sc)
+        # [RW-4_LEAD_FLOW] additive annotation: tag slots with lead-intent coverage.
+        # Existing fields (has_add_to_cart, has_initiate_checkout, has_purchase_event,
+        # has_unhashed_pii, events, event_ids, sources) are untouched by this block.
+        # If merged_log carries no intent key, this block is a complete no-op.
+        _intent = merged_log.get("intent") or merged_log.get("classified_intent") or ""
+        if _intent and _intent in NON_ECOMMERCE_INTENTS:
+            _expected = EXPECTED_EVENTS.get(_intent, []) or []
+            for _pid, _slot in per.items():
+                _seen = set(_slot.get("events") or [])
+                _matched = [e for e in _expected if e in _seen]
+                _slot["intent"] = _intent
+                _slot["expected_events"] = _expected
+                _slot["lead_events_matched"] = _matched
+                _slot["lead_event_coverage"] = (len(_matched) / len(_expected)) if _expected else 0.0
+            logger.info(f"[RW-4_LEAD_FLOW] intent={_intent} expected={_expected} pixels={list(per.keys())}")
         logger.info(f"[PER_PIXEL] {json.dumps(per, default=str)[:2000]}")
         return per
 
