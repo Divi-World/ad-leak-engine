@@ -3253,6 +3253,15 @@ originalPermissionsQuery(parameters)
         out["payment_stage_reached"] = bool(_pay.get("reached"))
         if _pay.get("reached"):
             out["payment_reached"] = True
+        # [RW-6] produce intent from page so RW-4 consumer activates
+        if not merged_log.get("intent") and not merged_log.get("classified_intent"):
+            try:
+                from src.ad_leak_engine.shared.intent import classify_intent_from_page
+                _ir = classify_intent_from_page(page)
+                if isinstance(_ir, dict):
+                    merged_log["intent"] = _ir.get("primary") or ""
+            except Exception:
+                pass
         merged_log["per_pixel"] = self._attribute_events_per_pixel(merged_log)
 
 
@@ -3885,6 +3894,15 @@ originalPermissionsQuery(parameters)
         if not merged_log.get("detected_pixel_id") and merged_log["detected_pixel_ids"]:
             merged_log["detected_pixel_id"] = merged_log["detected_pixel_ids"][0]["pixel_id"]
             merged_log["pixel_id_source"] = merged_log["detected_pixel_ids"][0]["sources"][0]
+        # [RW-6] produce intent from page so RW-4 consumer activates
+        if not merged_log.get("intent") and not merged_log.get("classified_intent"):
+            try:
+                from src.ad_leak_engine.shared.intent import classify_intent_from_page
+                _ir = classify_intent_from_page(page)
+                if isinstance(_ir, dict):
+                    merged_log["intent"] = _ir.get("primary") or ""
+            except Exception:
+                pass
         merged_log["per_pixel"] = self._attribute_events_per_pixel(merged_log)
         _rank = {"network_tr": 5, "network_config_bundle": 4, "fbq_track_single": 3,
                  "fbq_init": 2, "cdn_asset": 1, "tealium_static": 0}
