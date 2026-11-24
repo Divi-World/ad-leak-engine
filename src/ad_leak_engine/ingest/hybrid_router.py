@@ -22,6 +22,7 @@ from ..self_heal.fallback_chain import FallbackChain
 from ..persistence.cache import CacheManager
 from .graphql_source import GraphQLSource
 from .playwright_source import PlaywrightSource
+from .deduplicator import Deduplicator  # [RW-2]
 try:
     from ..self_heal.health_monitor import HealthMonitor
 except ImportError:
@@ -43,6 +44,12 @@ class HybridRouter:
             playwright_source=self.playwright,
             cache=self.cache
         )
+        self.dedup = Deduplicator()  # [RW-2] persistent across searches
+
+    def _dedup_yield(self, ads: list[RawAd]) -> Iterator[RawAd]:
+        """[RW-2] Batch-filter via Deduplicator before yielding."""
+        for ad in self.dedup.filter_new(ads):
+            yield ad
 
     def search(self, query: str, country: str, max_results: int = 50) -> Iterator[RawAd]:
         """Execute hierarchical search with automatic failover."""
@@ -53,7 +60,7 @@ class HybridRouter:
                 ads = list(self.api.search(query, country, max_results))
                 if ads:
                     logger.info(f"[HYBRID] Success via Graph API ({len(ads)} ads)")
-                    yield from ads
+                    yield from self._dedup_yield(ads)  # [RW-2]
                     return
             except Exception as e:
                 logger.warning(f"[HYBRID] Graph API failed: {e}. Falling back.")
@@ -66,7 +73,7 @@ class HybridRouter:
             if ads:
                 logger.info(f"[HYBRID] Success via GraphQL ({len(ads)} ads)")
                 self.breaker.record_success() # Reset breaker on success
-                yield from ads
+                yield from self._dedup_yield(ads)  # [RW-2]
                 return
         except (SchemaDriftError, BlockedError, RateLimitError, EmptyResponseError, CrawlerTimeoutError) as e:
             logger.warning(f"[HYBRID] GraphQL failed ({type(e).__name__}). Recording failure & falling back to Playwright.")
@@ -81,7 +88,7 @@ class HybridRouter:
             ads = list(self.playwright.search(query, country, max_results))
             if ads:
                 logger.info(f"[HYBRID] Success via Playwright ({len(ads)} ads)")
-                yield from ads
+                yield from self._dedup_yield(ads)  # [RW-2]
                 return
             else:
                 logger.warning("[HYBRID] Playwright returned 0 ads.")
