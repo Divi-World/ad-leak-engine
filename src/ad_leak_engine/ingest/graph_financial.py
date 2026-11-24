@@ -4,7 +4,17 @@ The API is FREE — requires only the OAuth token persisted in Tenant DB.
 Falls back to enhanced heuristics when no token is available.
 """
 import os
-import httpx
+from ..persistence.connection_pool import GraphQLConnectionPool  # [RW-3]
+
+
+_graph_pool = None  # [RW-3] module-level pooled client singleton
+
+
+def _get_graph_pool():
+    global _graph_pool
+    if _graph_pool is None:
+        _graph_pool = GraphQLConnectionPool()
+    return _graph_pool
 
 
 GRAPH_BASE = "https://graph.facebook.com/v19.0"
@@ -48,7 +58,7 @@ class GraphAPIFinancialIngestor:
         Endpoint: GET /me/adaccounts?fields=id,name,amount_spent
         """
         try:
-            resp = httpx.get(
+            resp = _get_graph_pool().get(
                 f"{GRAPH_BASE}/me/adaccounts",
                 params={
                     "fields": "id,name,amount_spent,currency",
@@ -71,7 +81,7 @@ class GraphAPIFinancialIngestor:
         """
         acct_id = account_id.replace("act_", "")
         try:
-            resp = httpx.get(
+            resp = _get_graph_pool().get(
                 f"{GRAPH_BASE}/act_{acct_id}/insights",
                 params={
                     "fields": "spend,impressions,clicks,actions,action_values,cost_per_action_type,purchase_roas,campaign_name",
