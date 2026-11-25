@@ -1087,16 +1087,28 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                         discover_phone_numbers_from_page as _dph,
                         crawl_contact_pages_smart as _ccp,
                         parse_sitemap_for_contacts as _psc,
+                        _is_valid_business_email as _ivbe,
                     )
                     _agg = _dea(landing, initial_html=html) or []
-                    if _agg:
-                        discovered_emails = list(dict.fromkeys(list(discovered_emails or []) + list(_agg)))[:5]
+                    _pool = list(discovered_emails or []) + list(_agg or [])
                     if html:
                         _social_handles = _dsh(html) or []
                         _contact_phones = _dph(html) or []
-                    _contact_pages = _ccp(landing) or []
-                    if not _contact_pages:
-                        _contact_pages = _psc(landing) or []
+                    _crawled = _ccp(landing) or []
+                    if not _crawled:
+                        _crawled = _psc(landing) or []
+                    # [P0-D2] Partition by observed content, not by function name:
+                    # entries carrying '@' are addresses, the rest are page paths.
+                    for _c in _crawled:
+                        _s = str(_c)
+                        if "@" in _s:
+                            _pool.append(_s)
+                        else:
+                            _contact_pages.append(_s)
+                    # Apply the module's OWN validator to the whole pool. The legacy
+                    # homepage regex upstream does not filter, so placeholder and
+                    # free-mail addresses were reaching the outreach payload.
+                    discovered_emails = [e for e in dict.fromkeys(_pool) if _ivbe(str(e))][:5]
                     logger.info(f"[CONTACT] emails={len(discovered_emails)} socials={len(_social_handles)} "
                                 f"phones={len(_contact_phones)} pages={len(_contact_pages)}")
                 except Exception as _ce:
