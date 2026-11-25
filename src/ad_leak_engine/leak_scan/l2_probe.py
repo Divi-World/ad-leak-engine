@@ -3424,15 +3424,27 @@ originalPermissionsQuery(parameters)
                 continue
 
         # SPA settle: client-side routing can outrun the verification window.
+        # [P0-C] Measured: a successful SFCC settle took ~9s from click, but this
+        # block slept a fixed 4s and checked ONCE, so slower runs fell through and
+        # the fulfilment/auth/guest/payment chain was skipped. Poll instead.
         try:
-            time.sleep(4)
-            settled = (page.url or "").lower()
-            if any(m in settled for m in ("checkout", "/basket/fulfilment", "/basket/payment",
-                                          "/basket/delivery", "/basket/summary",
-                                          "/on/demandware.store")):
-                self._last_checkout_snapshot = self._snapshot_gate(page)
-                logger.info(f"[FUNNEL] Checkout confirmed after SPA settle: {page.url}")
-                return True
+            _settle_markers = ("checkout", "/basket/fulfilment", "/basket/payment",
+                               "/basket/delivery", "/basket/summary",
+                               "/on/demandware.store")
+            _deadline = time.time() + 20
+            while time.time() < _deadline:
+                time.sleep(1.5)
+                settled = (page.url or "").lower()
+                if any(m in settled for m in _settle_markers):
+                    self._last_checkout_snapshot = self._snapshot_gate(page)
+                    logger.info(f"[FUNNEL] Checkout confirmed after SPA settle: {page.url}")
+                    return True
+                _snap = self._snapshot_gate(page)
+                _mk = (_snap.get("markers") or {})
+                if _mk.get("asks_postcode") or _mk.get("choose_delivery") or _mk.get("has_pay_now"):
+                    self._last_checkout_snapshot = _snap
+                    logger.info(f"[FUNNEL] Checkout gate evidenced in DOM at {page.url}")
+                    return True
         except Exception:
             pass
         logger.info("[FUNNEL] Checkout: no selector verified a checkout navigation or XHR")
@@ -4176,6 +4188,55 @@ originalPermissionsQuery(parameters)
             logger.debug(f"[PROBE_VERDICTS] skipped: {e}")
         return out
 
+    def _finalize_evidence(self, log: dict, page=None, referer_url: str = "") -> dict:
+        """[P0-A] Shared evidence finalizer built ONLY from existing methods.
+
+        Eight of nine swarm return paths previously bypassed the funnel-only
+        enrichment tail, so census / per-pixel / tealium / gtag / frames / workers
+        were lost whenever an earlier tier succeeded. Page-dependent calls are
+        guarded; nothing already present is overwritten.
+        """
+        try:
+            reqs = log.get("requests") or []
+            if not log.get("detected_pixel_ids"):
+                log["detected_pixel_ids"] = self._harvest_all_pixel_ids(reqs, log)
+            if not log.get("tealium_pixels"):
+                log["tealium_pixels"] = self._resolve_tealium_pixels(reqs, referer_url)
+            for _tp in (log.get("tealium_pixels") or []):
+                if not any(e["pixel_id"] == _tp["pixel_id"]
+                           for e in log.get("detected_pixel_ids", [])):
+                    log.setdefault("detected_pixel_ids", []).append(
+                        {"pixel_id": _tp["pixel_id"], "sources": ["tealium_static"], "hits": 1})
+            if not log.get("per_pixel"):
+                log["per_pixel"] = self._attribute_events_per_pixel(log)
+            if not log.get("gtag_ids"):
+                _gtag = []
+                for _r in reqs:
+                    if not isinstance(_r, dict):
+                        continue
+                    for _g in RE_GTAG_ID.findall(str(_r.get("url", ""))):
+                        if _g not in _gtag:
+                            _gtag.append(_g)
+                log["gtag_ids"] = _gtag
+            if not log.get("pixel_census"):
+                log["pixel_census"] = self._pixel_census(log)
+                _cen = log["pixel_census"] or {}
+                if _cen.get("primary_pixel_id") and not log.get("detected_pixel_id"):
+                    log["detected_pixel_id"] = _cen["primary_pixel_id"]
+                if _cen.get("all_validations") and not log.get("pixel_validations"):
+                    log["pixel_validations"] = _cen["all_validations"]
+            if page is not None:
+                if not log.get("worker_harvest"):
+                    log["worker_harvest"] = pf.harvest_workers(page)
+                if not log.get("frame_harvest"):
+                    log["frame_harvest"] = pf.harvest_frames(
+                        page, id(page) in getattr(self, "_mw_page_ids", set()))
+                if not log.get("tracking_diagnostics"):
+                    log["tracking_diagnostics"] = self._dump_tracking_diagnostics(page, reqs)
+        except Exception as _fe:
+            logger.debug(f"[FINALIZE] skipped: {_fe}")
+        return log
+
     def _probe_swarm(self, url: str, force_ecommerce: bool = False) -> dict:
         """Main Entry Point: Hybrid Stealth Swarm."""
         domain_lower = urlparse(url).netloc.lower()
@@ -4211,7 +4272,7 @@ originalPermissionsQuery(parameters)
             logger.info(f"[SWARM] SUCCESS via Shopify Sandbox! Pixel: {sandbox_log['detected_pixel_id']}")
             final_log["pixel_validation"] = self._validate_pixel_via_config(sandbox_log["detected_pixel_id"])
             final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
-            return final_log
+            return self._finalize_evidence(final_log, referer_url=url)
 
         # --- TIER 1: Static GTM Resolver (early, before browser engines) ---
         if cffi_requests:
@@ -4234,7 +4295,7 @@ originalPermissionsQuery(parameters)
                             logger.info(f"[SWARM] SUCCESS via GTM Static Resolver! Pixel: {best_pid}")
                             final_log["pixel_validation"] = self._validate_pixel_via_config(best_pid)
                             final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
-                            return final_log
+                            return self._finalize_evidence(final_log, referer_url=url)
             except Exception as e:
                 logger.debug(f"[SWARM] Early GTM check failed: {e}")
 
@@ -4248,7 +4309,7 @@ originalPermissionsQuery(parameters)
                     logger.info(f"[SWARM] SUCCESS via invisible_playwright! Pixel: {iw_log['detected_pixel_id']}")
                     final_log["pixel_validation"] = self._validate_pixel_via_config(iw_log["detected_pixel_id"])
                     final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
-                    return final_log
+                    return self._finalize_evidence(final_log, referer_url=url)
                 elif iw_log.get("blocked_status"):
                     logger.warning(f"[SWARM] invisible_playwright blocked ({iw_log['blocked_status']}). Falling back.")
                 else:
@@ -4264,7 +4325,7 @@ originalPermissionsQuery(parameters)
                 final_log["detected_pixel_id"] = cf_log["detected_pixel_id"]
                 final_log["pixel_validation"] = self._validate_pixel_via_config(cf_log["detected_pixel_id"])
                 final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
-                return final_log
+                return self._finalize_evidence(final_log, referer_url=url)
             elif cf_log.get("blocked_status"):
                 logger.warning(f"[SWARM] Camoufox Blocked. Falling back to Ghost Protocol.")
             else:
@@ -4290,7 +4351,7 @@ originalPermissionsQuery(parameters)
                 final_log["detected_pixel_id"] = ghost_log["detected_pixel_id"]
                 final_log["pixel_validation"] = self._validate_pixel_via_config(ghost_log["detected_pixel_id"])
                 final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
-                return final_log
+                return self._finalize_evidence(final_log, referer_url=url)
             if ghost_log.get("gtm_id"):
                 final_log["gtm_id"] = ghost_log["gtm_id"]
 
@@ -4320,7 +4381,7 @@ originalPermissionsQuery(parameters)
                     final_log["pixel_validation"] = self._validate_pixel_via_config(best_pid)
                     final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
                     logger.info(f"[SWARM] SUCCESS via Universal Asset Sweep! Pixel: {best_pid} (score={best_score})")
-                    return final_log
+                    return self._finalize_evidence(final_log, referer_url=url)
             except Exception as e:
                 logger.debug(f"[SWARM] Universal asset sweep failed: {e}")
 
@@ -4336,7 +4397,7 @@ originalPermissionsQuery(parameters)
             logger.info(f"[SWARM] SUCCESS via Universal Extractor! Pixel: {extraction_result['detected_pixel_id']}")
             final_log["pixel_validation"] = self._validate_pixel_via_config(extraction_result["detected_pixel_id"])
             final_log["tracking_mode_inferred"] = self._infer_tracking_mode(final_log)
-            return final_log
+            return self._finalize_evidence(final_log, referer_url=url)
 
         # --- TIER 6: Funnel escalation for e-commerce targets ---
         escalate = force_ecommerce or self._looks_like_ecommerce(url)
@@ -4424,12 +4485,12 @@ originalPermissionsQuery(parameters)
                             f"gate={funnel.get('fulfilment_result')} | "
                             f"meta={funnel.get('meta_fb_observations')}"
                         )
-                    return final_log
+                    return self._finalize_evidence(final_log, referer_url=url)
             except Exception as e:
                 logger.warning(f"[SWARM] Funnel escalation failed: {e}")
         final_log["blocked_status"] = "ALL_VECTORS_FAILED"
         logger.error(f"[SWARM] Critical Failure: No Pixel ID found.")
-        return final_log
+        return self._finalize_evidence(final_log, referer_url=url)
 
     def _simulate_human_scroll(self, page):
         try:

@@ -834,6 +834,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                 leaks = list(l1.scan(page))
                 platform, conf, platform_evidence = "custom", 0.3, []
                 html = None
+                _resp_headers = {}
                 discovered_emails = []
 
                 # Fast Fetch HTML
@@ -843,6 +844,10 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                         resp = cffi_requests.get(landing, impersonate="chrome120", timeout=5)
                         if resp.status_code == 200:
                             html = resp.text
+                            try:
+                                _resp_headers = dict(resp.headers or {})
+                            except Exception:
+                                _resp_headers = {}
                             from urllib.parse import urlparse
                             domain_lower = urlparse(landing).netloc.lower()
 
@@ -1055,6 +1060,47 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                     logger.error(f"Deep scan error for {page_name}: {e}")
 
                 # --- SAFE FIX GENERATION ---
+                try:
+                    _pn, _pc, _pe = detector.detect(landing, html, _resp_headers)
+                    if _pn and _pc > conf and not (platform != "custom" and conf >= 0.85):
+                        platform, conf = _pn, _pc
+                        platform_evidence = list(platform_evidence or []) + list(_pe or [])
+                        logger.info(f"[PLATFORM] detector -> {platform} ({conf})")
+                except Exception as _pde:
+                    logger.debug(f"[PLATFORM] detector skipped: {_pde}")
+                _hs = str(_resp_headers).lower()
+                if platform == "custom" or conf < 0.85:
+                    for _fp, _pl in (("x-argos-brand","sfcc"),("demandware","sfcc"),
+                                     ("dwanonymous","sfcc"),("x-dw-","sfcc"),
+                                     ("x-magento","magento"),("x-hybris","hybris"),
+                                     ("x-shopid","shopify"),("x-sorting-hat-pod","shopify")):
+                        if _fp in _hs:
+                            platform, conf = _pl, max(conf, 0.90)
+                            platform_evidence = list(platform_evidence or []) + [f"header:{_fp}"]
+                            logger.info(f"[PLATFORM] header {_fp} -> {platform} ({conf})")
+                            break
+                _social_handles, _contact_phones, _contact_pages = [], [], []
+                try:
+                    from ...shared.email_discovery import (
+                        discover_emails_aggressively as _dea,
+                        discover_social_handles_from_page as _dsh,
+                        discover_phone_numbers_from_page as _dph,
+                        crawl_contact_pages_smart as _ccp,
+                        parse_sitemap_for_contacts as _psc,
+                    )
+                    _agg = _dea(landing, initial_html=html) or []
+                    if _agg:
+                        discovered_emails = list(dict.fromkeys(list(discovered_emails or []) + list(_agg)))[:5]
+                    if html:
+                        _social_handles = _dsh(html) or []
+                        _contact_phones = _dph(html) or []
+                    _contact_pages = _ccp(landing) or []
+                    if not _contact_pages:
+                        _contact_pages = _psc(landing) or []
+                    logger.info(f"[CONTACT] emails={len(discovered_emails)} socials={len(_social_handles)} "
+                                f"phones={len(_contact_phones)} pages={len(_contact_pages)}")
+                except Exception as _ce:
+                    logger.debug(f"[CONTACT] discovery skipped: {_ce}")
                 fixes = []
                 
                 # Determine Context Keywords Safely
@@ -1073,7 +1119,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                         # [RW-1] Use actual platform for ALL tiers.
                         # L1 creative leaks benefit from vertical-specific strategies
                         # available in Shopify/WooCommerce generators.
-                        target_platform = platform or "custom"
+                        target_platform = {"shopify":"shopify","woocommerce":"woocommerce","bigcommerce":"bigcommerce","nextjs":"nextjs","nuxtjs":"nextjs","headless":"nextjs"}.get(platform, "custom")
                         target_confidence = conf
                         
                         fix_obj = forge.generate(
@@ -1105,7 +1151,10 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
                     "estimated_recovery": pack.estimated_recovery,
                     "teardown_path": f"output/{job_id}/{page_id_iter}/teardown.md",
                     "discovered_emails": discovered_emails,
-                    "contact_email": discovered_emails[0] if discovered_emails else None
+                    "contact_email": discovered_emails[0] if discovered_emails else None,
+                    "social_handles": _social_handles,
+                    "contact_phones": _contact_phones,
+                    "contact_pages": _contact_pages
                 })
                 processed += 1
 
@@ -1419,7 +1468,7 @@ def run_scan_pipeline(job_id: str, keyword: str, country: str, limit: int, direc
             fixes = []
             for leak in leaks:
                 try:
-                    target_platform = platform or "custom"
+                    target_platform = {"shopify":"shopify","woocommerce":"woocommerce","bigcommerce":"bigcommerce","nextjs":"nextjs","nuxtjs":"nextjs","headless":"nextjs"}.get(platform, "custom")
                     target_confidence = conf
                     fix_obj = forge.generate(
                         leak,
